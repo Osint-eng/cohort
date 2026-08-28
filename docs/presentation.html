@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cohort — AI Workspace for Student Teams</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Azeret+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --font-body: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --font-mono: 'Azeret Mono', 'SF Mono', Consolas, monospace;
+  --bg: #faf6f0;
+  --surface: #ffffff;
+  --surface2: #f5ece0;
+  --surface-elevated: #fffdf5;
+  --border: rgba(60, 40, 20, 0.08);
+  --border-bright: rgba(60, 40, 20, 0.16);
+  --text: #2c2a25;
+  --text-dim: #7c756a;
+  --accent: #c2410c;
+  --accent-dim: rgba(194, 65, 12, 0.08);
+  --coral: #e85d2a;
+  --coral-dim: rgba(232, 93, 42, 0.1);
+  --sage: #6b7d5a;
+  --sage-dim: rgba(107, 125, 90, 0.1);
+  --code-bg: #2c2520;
+  --code-text: #f5ece0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1c1916;
+    --surface: #262220;
+    --surface2: #302b28;
+    --surface-elevated: #3a3430;
+    --border: rgba(200, 180, 160, 0.08);
+    --border-bright: rgba(200, 180, 160, 0.16);
+    --text: #f0e8dc;
+    --text-dim: #a09888;
+    --accent: #e85d2a;
+    --accent-dim: rgba(232, 93, 42, 0.1);
+    --coral: #f0703a;
+    --coral-dim: rgba(240, 112, 58, 0.12);
+    --sage: #94a87a;
+    --sage-dim: rgba(148, 168, 122, 0.1);
+    --code-bg: #141210;
+    --code-text: #f0e8dc;
+  }
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: var(--font-body);
+  color: var(--text);
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.deck {
+  height: 100dvh;
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+.slide {
+  height: 100dvh;
+  scroll-snap-align: start;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(40px, 6vh, 80px) clamp(40px, 8vw, 120px);
+  isolation: isolate;
+  opacity: 0;
+  transform: translateY(40px) scale(0.98);
+  transition:
+    opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.slide.visible { opacity: 1; transform: none; }
+
+.slide .reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition:
+    opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+    transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.slide.visible .reveal { opacity: 1; transform: none; }
+.slide.visible .reveal:nth-child(1) { transition-delay: 0.1s; }
+.slide.visible .reveal:nth-child(2) { transition-delay: 0.2s; }
+.slide.visible .reveal:nth-child(3) { transition-delay: 0.3s; }
+.slide.visible .reveal:nth-child(4) { transition-delay: 0.4s; }
+.slide.visible .reveal:nth-child(5) { transition-delay: 0.5s; }
+.slide.visible .reveal:nth-child(6) { transition-delay: 0.6s; }
+.slide.visible .reveal:nth-child(7) { transition-delay: 0.7s; }
+.slide.visible .reveal:nth-child(8) { transition-delay: 0.8s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .slide, .slide .reveal {
+    opacity: 1 !important;
+    transform: none !important;
+    transition: none !important;
+  }
+}
+
+/* Nav chrome */
+.deck-progress {
+  position: fixed; top: 0; left: 0; height: 3px;
+  background: var(--accent); z-index: 100;
+  transition: width 0.3s ease; pointer-events: none;
+}
+.deck-dots {
+  position: fixed; right: clamp(12px, 2vw, 24px); top: 50%;
+  transform: translateY(-50%); display: flex; flex-direction: column;
+  gap: 8px; z-index: 100; padding: 8px;
+  background: color-mix(in srgb, var(--bg) 60%, transparent 40%);
+  border-radius: 20px;
+  backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+}
+.deck-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--text-dim); opacity: 0.3; border: none; padding: 0;
+  cursor: pointer; transition: opacity 0.2s ease, transform 0.2s ease;
+}
+.deck-dot:hover { opacity: 0.6; }
+.deck-dot.active { opacity: 1; transform: scale(1.5); background: var(--accent); }
+.deck-counter {
+  position: fixed; bottom: clamp(12px, 2vh, 24px); right: clamp(12px, 2vw, 24px);
+  font-family: var(--font-mono); font-size: 12px; color: var(--text-dim);
+  z-index: 100; font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.deck-hints {
+  position: fixed; bottom: clamp(12px, 2vh, 24px); left: 50%;
+  transform: translateX(-50%); font-family: var(--font-mono);
+  font-size: 11px; color: var(--text-dim); opacity: 0.6; z-index: 100;
+  transition: opacity 0.5s ease; white-space: nowrap;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.deck-hints.faded { opacity: 0; pointer-events: none; }
+
+/* Typography */
+.slide__display {
+  font-size: clamp(64px, 14vw, 180px);
+  font-weight: 800;
+  letter-spacing: -4px;
+  line-height: 0.92;
+  text-wrap: balance;
+}
+.slide__heading {
+  font-size: clamp(28px, 5vw, 48px);
+  font-weight: 700;
+  letter-spacing: -1px;
+  line-height: 1.1;
+  text-wrap: balance;
+}
+.slide__body {
+  font-size: clamp(16px, 2.2vw, 22px);
+  line-height: 1.6;
+  color: var(--text-dim);
+  text-wrap: pretty;
+}
+.slide__subtitle {
+  font-family: var(--font-mono);
+  font-size: clamp(12px, 1.5vw, 18px);
+  color: var(--text-dim);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.slide__label {
+  font-family: var(--font-mono);
+  font-size: clamp(10px, 1.2vw, 13px);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+.slide__bullets {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.slide__bullets li {
+  font-size: clamp(15px, 1.9vw, 20px);
+  color: var(--text-dim);
+  padding-left: 22px;
+  position: relative;
+  line-height: 1.45;
+}
+.slide__bullets li::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0.55em;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  opacity: 0.7;
+}
+
+/* Title slide */
+.slide--title {
+  align-items: center;
+  text-align: center;
+  background-image: radial-gradient(ellipse at 50% 30%, var(--accent-dim) 0%, transparent 55%);
+}
+.slide--title .slide__display { color: var(--accent); }
+
+/* Content two-col */
+.slide--content .slide__inner {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: clamp(32px, 5vw, 64px);
+  align-items: center;
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.slide__aside {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: clamp(20px, 3vh, 32px);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.04);
+}
+
+/* Persona stack */
+.persona-stack {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(16px, 2.5vh, 28px);
+  margin-top: clamp(24px, 3.5vh, 40px);
+  max-width: 720px;
+}
+.persona {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 22px;
+}
+.persona__icon {
+  width: 44px; height: 44px;
+  border-radius: 12px;
+  background: var(--accent-dim);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  color: var(--accent);
+}
+.persona__title {
+  font-weight: 700;
+  font-size: clamp(16px, 2vw, 20px);
+  margin-bottom: 4px;
+}
+.persona__desc {
+  font-size: clamp(14px, 1.7vw, 17px);
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+
+/* Feature grid */
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(14px, 2vw, 22px);
+  margin-top: clamp(24px, 3.5vh, 40px);
+}
+.feature-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: clamp(16px, 2.2vh, 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.feature-card__num {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  letter-spacing: 0.5px;
+}
+.feature-card__title {
+  font-weight: 700;
+  font-size: clamp(15px, 1.8vw, 18px);
+}
+.feature-card__desc {
+  font-size: clamp(13px, 1.5vw, 15px);
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+
+/* Pipeline */
+.pipeline {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin-top: clamp(28px, 4vh, 48px);
+  flex-wrap: wrap;
+}
+.pipeline__step {
+  flex: 1;
+  min-width: 140px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--border-bright);
+  border-radius: 12px;
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pipeline__num {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.pipeline__name {
+  font-weight: 700;
+  font-size: clamp(14px, 1.7vw, 17px);
+}
+.pipeline__desc {
+  font-size: clamp(12px, 1.4vw, 14px);
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+.pipeline__file {
+  margin-top: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--sage);
+  background: var(--sage-dim);
+  padding: 4px 8px;
+  border-radius: 6px;
+  width: fit-content;
+}
+.pipeline__arrow {
+  display: flex;
+  align-items: center;
+  color: var(--text-dim);
+  opacity: 0.5;
+  padding: 0 6px;
+}
+
+/* AI blocks */
+.ai-blocks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(14px, 2vw, 20px);
+  margin-top: clamp(24px, 3.5vh, 40px);
+}
+.ai-block {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: clamp(16px, 2.2vh, 24px);
+}
+.ai-block__tag {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+.ai-block__title {
+  font-weight: 700;
+  font-size: clamp(16px, 1.9vw, 19px);
+  margin-bottom: 6px;
+}
+.ai-block__desc {
+  font-size: clamp(13px, 1.5vw, 15px);
+  color: var(--text-dim);
+  line-height: 1.45;
+}
+.ai-thesis {
+  margin-top: clamp(20px, 3vh, 32px);
+  font-family: var(--font-mono);
+  font-size: clamp(13px, 1.6vw, 16px);
+  color: var(--text-dim);
+  border-left: 3px solid var(--accent);
+  padding-left: 16px;
+  line-height: 1.5;
+}
+
+/* Impact */
+.impact-stack {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(14px, 2vh, 20px);
+  margin-top: clamp(24px, 3.5vh, 40px);
+  max-width: 800px;
+}
+.impact-band {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 20px;
+}
+.impact-band__mark {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--accent);
+  flex-shrink: 0;
+  width: 28px;
+}
+.impact-band__title {
+  font-weight: 700;
+  font-size: clamp(15px, 1.8vw, 18px);
+  margin-bottom: 3px;
+}
+.impact-band__desc {
+  font-size: clamp(13px, 1.5vw, 15px);
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+/* Roadmap */
+.roadmap {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: clamp(12px, 1.8vw, 18px);
+  margin-top: clamp(24px, 3.5vh, 40px);
+}
+.roadmap__item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: clamp(14px, 2vh, 20px);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.roadmap__phase {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+.roadmap__name {
+  font-weight: 700;
+  font-size: clamp(14px, 1.7vw, 17px);
+}
+.roadmap__desc {
+  font-size: clamp(12px, 1.4vw, 14px);
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+/* Quote */
+.slide--quote {
+  align-items: center;
+  text-align: center;
+}
+.slide__quote-mark {
+  font-size: clamp(80px, 16vw, 140px);
+  line-height: 0.7;
+  color: var(--accent);
+  opacity: 0.25;
+  font-family: Georgia, serif;
+}
+.slide--quote blockquote {
+  font-size: clamp(22px, 3.5vw, 36px);
+  font-weight: 600;
+  line-height: 1.35;
+  max-width: 800px;
+  margin: 0 auto;
+  text-wrap: balance;
+}
+.slide--quote cite {
+  display: block;
+  margin-top: clamp(18px, 2.5vh, 28px);
+  font-family: var(--font-mono);
+  font-size: clamp(13px, 1.5vw, 16px);
+  color: var(--text-dim);
+  font-style: normal;
+}
+
+/* Bleed / closing */
+.slide--bleed {
+  padding: 0;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+.slide__bg--gradient {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 40%, var(--accent-dim) 0%, transparent 60%),
+              linear-gradient(160deg, var(--bg) 0%, var(--surface2) 100%);
+  z-index: 0;
+}
+.slide__scrim { position: absolute; inset: 0; z-index: 1; }
+.slide--bleed .slide__content {
+  position: relative;
+  z-index: 2;
+  padding: clamp(40px, 6vh, 80px) clamp(40px, 8vw, 120px);
+}
+
+/* Responsive */
+@media (max-width: 820px) {
+  .feature-grid { grid-template-columns: 1fr 1fr; }
+  .ai-blocks { grid-template-columns: 1fr; }
+  .roadmap { grid-template-columns: 1fr 1fr; }
+  .pipeline { flex-direction: column; }
+  .pipeline__arrow { transform: rotate(90deg); justify-content: center; padding: 4px 0; }
+}
+@media (max-width: 768px) {
+  .slide--content .slide__inner { grid-template-columns: 1fr; }
+  .slide__aside { display: none; }
+  .feature-grid { grid-template-columns: 1fr; }
+}
+@media (max-height: 700px) {
+  .slide { padding: 32px 40px; }
+  .deck-dots { display: none; }
+}
+@media (max-height: 600px) {
+  .slide__display { font-size: clamp(40px, 10vw, 80px); }
+}
+</style>
+</head>
+<body>
+<div class="deck">
+
+  <!-- 1. Title -->
+  <section class="slide slide--title">
+    <p class="slide__subtitle reveal">AI Builders Hackathon · Not another demo</p>
+    <h1 class="slide__display reveal">Cohort</h1>
+    <p class="slide__subtitle reveal" style="margin-top:clamp(18px,2.5vh,36px);font-size:clamp(14px,1.8vw,22px);text-transform:none;letter-spacing:0.3px;">
+      AI workspace for student teams — owners, deadlines, and a fair record
+    </p>
+  </section>
+
+  <!-- 2. Problem -->
+  <section class="slide slide--content" style="background-image:radial-gradient(ellipse at 20% 80%, var(--accent-dim) 0%, transparent 45%);">
+    <div class="slide__inner">
+      <div>
+        <p class="slide__label reveal">Problem Statement</p>
+        <h2 class="slide__heading reveal">Group projects start as chaos</h2>
+        <div class="slide__body reveal" style="margin-top:clamp(14px,2vh,24px);">
+          A WhatsApp dump. A half-empty Google Doc. Three people who each think someone else owns the slides. By week three the work is uneven, the deadline is close, and nobody can show the professor who actually did what.
+        </div>
+        <ul class="slide__bullets" style="margin-top:clamp(16px,2.2vh,28px);">
+          <li class="reveal">No clear owners or due dates</li>
+          <li class="reveal">Contribution is invisible and disputed</li>
+          <li class="reveal">The “herder” burns out while others free-ride</li>
+        </ul>
+      </div>
+      <div class="slide__aside reveal">
+        <p style="font-family:var(--font-mono);font-size:12px;color:var(--accent);margin-bottom:12px;letter-spacing:1px;">REALITY CHECK</p>
+        <p style="font-size:clamp(15px,1.8vw,18px);line-height:1.5;color:var(--text);">
+          The world does not need another AI demo.<br><br>
+          Students need something that turns the chaos into <strong>owners, deadlines, and a fair record</strong> — and that they would open again tomorrow.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Solution -->
+  <section class="slide slide--content">
+    <div class="slide__inner">
+      <div>
+        <p class="slide__label reveal">Solution Overview</p>
+        <h2 class="slide__heading reveal">Cohort runs the project, not the homework</h2>
+        <div class="slide__body reveal" style="margin-top:clamp(14px,2vh,24px);">
+          Paste a brief, chat export, or meeting notes. Cohort extracts tasks, proposes owners and due dates, and keeps a contribution log your team — and your professor — can trust.
+        </div>
+        <ul class="slide__bullets" style="margin-top:clamp(16px,2.2vh,28px);">
+          <li class="reveal">Task board becomes the source of truth</li>
+          <li class="reveal">Agent nags only what is late or blocked</li>
+          <li class="reveal">Every accept, complete, and unblock is logged</li>
+        </ul>
+      </div>
+      <div class="slide__aside reveal">
+        <p style="font-family:var(--font-mono);font-size:12px;color:var(--accent);margin-bottom:12px;letter-spacing:1px;">NOT A DEMO · NOT A WRAPPER</p>
+        <p style="font-size:clamp(15px,1.8vw,18px);line-height:1.5;">
+          It does not do the assignment.<br><br>
+          It answers: <em>Who owns what? What is blocked? What is due next?</em><br><br>
+          Built as multi-player software people can actually use.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. Target Users -->
+  <section class="slide">
+    <p class="slide__label reveal">Target Users</p>
+    <h2 class="slide__heading reveal">Built for three people in the room</h2>
+    <div class="persona-stack">
+      <div class="persona reveal">
+        <div class="persona__icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <div>
+          <div class="persona__title">Student teams</div>
+          <div class="persona__desc">Group assignments, labs, hackathons, club work — anyone who has to ship together under a deadline.</div>
+        </div>
+      </div>
+      <div class="persona reveal">
+        <div class="persona__icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+        </div>
+        <div>
+          <div class="persona__title">The herder</div>
+          <div class="persona__desc">The one person who always ends up chasing everyone else. Cohort takes the admin load off their shoulders.</div>
+        </div>
+      </div>
+      <div class="persona reveal">
+        <div class="persona__icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+        </div>
+        <div>
+          <div class="persona__title">Professors</div>
+          <div class="persona__desc">Want a clean contribution trail instead of a he-said-she-said email chain at grading time.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. Product Features -->
+  <section class="slide">
+    <p class="slide__label reveal">Product Features</p>
+    <h2 class="slide__heading reveal">From paste to living board</h2>
+    <div class="feature-grid">
+      <div class="feature-card reveal">
+        <span class="feature-card__num">01</span>
+        <div class="feature-card__title">Ingest anything</div>
+        <div class="feature-card__desc">Brief, syllabus excerpt, WhatsApp/Discord export, or meeting notes. Drop it in.</div>
+      </div>
+      <div class="feature-card reveal">
+        <span class="feature-card__num">02</span>
+        <div class="feature-card__title">Proposed task board</div>
+        <div class="feature-card__desc">Titles, owners, due dates, and dependencies — generated as structured work items.</div>
+      </div>
+      <div class="feature-card reveal">
+        <span class="feature-card__num">03</span>
+        <div class="feature-card__title">Confirm & edit</div>
+        <div class="feature-card__desc">You stay in control. Accept, reassign, or tweak. The board becomes source of truth.</div>
+      </div>
+      <div class="feature-card reveal">
+        <span class="feature-card__num">04</span>
+        <div class="feature-card__title">Smart nags</div>
+        <div class="feature-card__desc">Agent only surfaces what is late or blocked, and drafts the check-in message.</div>
+      </div>
+      <div class="feature-card reveal">
+        <span class="feature-card__num">05</span>
+        <div class="feature-card__title">Contribution log</div>
+        <div class="feature-card__desc">Who accepted, completed, and unblocked work — a record the team and professor can trust.</div>
+      </div>
+      <div class="feature-card reveal">
+        <span class="feature-card__num">06</span>
+        <div class="feature-card__title">Shareable status</div>
+        <div class="feature-card__desc">Live multi-player workspace with a clean status view anyone can open.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6. How it works -->
+  <section class="slide">
+    <p class="slide__label reveal">How It Works</p>
+    <h2 class="slide__heading reveal">Six steps from chaos to clarity</h2>
+    <div class="pipeline reveal">
+      <div class="pipeline__step" style="border-top-color:var(--accent);">
+        <div class="pipeline__num">01</div>
+        <div class="pipeline__name">Create</div>
+        <div class="pipeline__desc">Start a project and invite teammates</div>
+        <div class="pipeline__file">Workspace</div>
+      </div>
+      <div class="pipeline__arrow">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path d="M5 12h14m-4-4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="pipeline__step" style="border-top-color:var(--coral);">
+        <div class="pipeline__num">02</div>
+        <div class="pipeline__name">Drop in</div>
+        <div class="pipeline__desc">Brief, chat log, or notes</div>
+        <div class="pipeline__file">Ingest</div>
+      </div>
+      <div class="pipeline__arrow">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path d="M5 12h14m-4-4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="pipeline__step" style="border-top-color:var(--sage);">
+        <div class="pipeline__num">03</div>
+        <div class="pipeline__name">Propose</div>
+        <div class="pipeline__desc">AI builds the task board</div>
+        <div class="pipeline__file">Extract</div>
+      </div>
+      <div class="pipeline__arrow">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path d="M5 12h14m-4-4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="pipeline__step" style="border-top-color:var(--accent);">
+        <div class="pipeline__num">04</div>
+        <div class="pipeline__name">Confirm</div>
+        <div class="pipeline__desc">Edit owners & dates</div>
+        <div class="pipeline__file">Board</div>
+      </div>
+      <div class="pipeline__arrow">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path d="M5 12h14m-4-4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="pipeline__step" style="border-top-color:var(--coral);">
+        <div class="pipeline__num">05</div>
+        <div class="pipeline__name">Track</div>
+        <div class="pipeline__desc">Nags + contribution log</div>
+        <div class="pipeline__file">Agent</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. Technical Architecture -->
+  <section class="slide">
+    <p class="slide__label reveal">Technical Architecture</p>
+    <h2 class="slide__heading reveal">Small SaaS. Not a prompt demo.</h2>
+    <div class="pipeline reveal">
+      <div class="pipeline__step" style="border-top-color:var(--accent);">
+        <div class="pipeline__num">01</div>
+        <div class="pipeline__name">Frontend</div>
+        <div class="pipeline__desc">Live multi-player board & status view</div>
+        <div class="pipeline__file">React · TanStack Start · Tailwind</div>
+      </div>
+      <div class="pipeline__arrow">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path d="M5 12h14m-4-4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="pipeline__step" style="border-top-color:var(--coral);">
+        <div class="pipeline__num">02</div>
+        <div class="pipeline__name">Hosting</div>
+        <div class="pipeline__desc">Edge-ready deployment</div>
+        <div class="pipeline__file">Vercel (PaaS)</div>
+      </div>
+      <div class="pipeline__arrow">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path d="M5 12h14m-4-4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="pipeline__step" style="border-top-color:var(--sage);">
+        <div class="pipeline__num">03</div>
+        <div class="pipeline__name">Backend</div>
+        <div class="pipeline__desc">Auth, data, real-time</div>
+        <div class="pipeline__file">Managed BaaS</div>
+      </div>
+      <div class="pipeline__arrow">
+        <svg viewBox="0 0 24 24" width="22" height="22"><path d="M5 12h14m-4-4l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="pipeline__step" style="border-top-color:var(--accent);">
+        <div class="pipeline__num">04</div>
+        <div class="pipeline__name">Models</div>
+        <div class="pipeline__desc">Structured extraction only</div>
+        <div class="pipeline__file">API · not the product</div>
+      </div>
+    </div>
+    <p class="slide__body reveal" style="margin-top:clamp(28px,4vh,44px);max-width:700px;">
+      TypeScript end-to-end. The product is the workflow — multi-player workspace, live board, AI that writes structured work items, not essays.
+    </p>
+  </section>
+
+  <!-- 8. AI Technologies -->
+  <section class="slide">
+    <p class="slide__label reveal">AI Technologies Used</p>
+    <h2 class="slide__heading reveal">The model is a tool, not the product</h2>
+    <div class="ai-blocks">
+      <div class="ai-block reveal">
+        <div class="ai-block__tag">Extraction</div>
+        <div class="ai-block__title">Structured task generation</div>
+        <div class="ai-block__desc">Turns free-text briefs and chat logs into titles, owners, due dates, and dependencies — not free-form prose.</div>
+      </div>
+      <div class="ai-block reveal">
+        <div class="ai-block__tag">Assignment</div>
+        <div class="ai-block__title">Owner & deadline proposals</div>
+        <div class="ai-block__desc">Suggests who should own what based on context and past contribution signals, then lets humans confirm.</div>
+      </div>
+      <div class="ai-block reveal">
+        <div class="ai-block__tag">Agent</div>
+        <div class="ai-block__title">Selective nags & drafts</div>
+        <div class="ai-block__desc">Surfaces only late or blocked items and drafts the check-in message so the herder doesn’t have to.</div>
+      </div>
+      <div class="ai-block reveal">
+        <div class="ai-block__tag">Log</div>
+        <div class="ai-block__title">Contribution trail</div>
+        <div class="ai-block__desc">Records accepts, completions, and unblocks as first-class events — audit-ready for the team and professor.</div>
+      </div>
+    </div>
+    <div class="ai-thesis reveal">Models via API. The durable value is the workflow, the live board, and the trusted log — software people would open again tomorrow.</div>
+  </section>
+
+  <!-- 9. Impact -->
+  <section class="slide">
+    <p class="slide__label reveal">Impact & Value Proposition</p>
+    <h2 class="slide__heading reveal">Chaos in. Owners out.</h2>
+    <div class="impact-stack">
+      <div class="impact-band reveal">
+        <div class="impact-band__mark">→</div>
+        <div>
+          <div class="impact-band__title">Fair contribution record</div>
+          <div class="impact-band__desc">Professors and teammates see who actually moved the work forward — no more he-said-she-said.</div>
+        </div>
+      </div>
+      <div class="impact-band reveal">
+        <div class="impact-band__mark">→</div>
+        <div>
+          <div class="impact-band__title">Less herding, more shipping</div>
+          <div class="impact-band__desc">The person who always organizes everyone gets their time back. The agent handles the nags.</div>
+        </div>
+      </div>
+      <div class="impact-band reveal">
+        <div class="impact-band__mark">→</div>
+        <div>
+          <div class="impact-band__title">Source of truth that sticks</div>
+          <div class="impact-band__desc">One living board instead of scattered chats, docs, and conflicting memories of “who said they’d do it.”</div>
+        </div>
+      </div>
+      <div class="impact-band reveal">
+        <div class="impact-band__mark">→</div>
+        <div>
+          <div class="impact-band__title">Built to be used beyond the hackathon</div>
+          <div class="impact-band__desc">Real multi-player SaaS for the projects students already have. The test: would someone open it again tomorrow?</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10. Roadmap + Close -->
+  <section class="slide">
+    <p class="slide__label reveal">Future Roadmap</p>
+    <h2 class="slide__heading reveal">Where Cohort goes next</h2>
+    <div class="roadmap">
+      <div class="roadmap__item reveal">
+        <div class="roadmap__phase">Now</div>
+        <div class="roadmap__name">Core loop</div>
+        <div class="roadmap__desc">Ingest → propose board → confirm → log. Public demo live.</div>
+      </div>
+      <div class="roadmap__item reveal">
+        <div class="roadmap__phase">Next</div>
+        <div class="roadmap__name">Deeper integrations</div>
+        <div class="roadmap__desc">Slack / Discord / LMS hooks so the board updates where teams already live.</div>
+      </div>
+      <div class="roadmap__item reveal">
+        <div class="roadmap__phase">Soon</div>
+        <div class="roadmap__name">Professor view</div>
+        <div class="roadmap__desc">One-click contribution summary suitable for grading and office hours.</div>
+      </div>
+      <div class="roadmap__item reveal">
+        <div class="roadmap__phase">Later</div>
+        <div class="roadmap__name">Team memory</div>
+        <div class="roadmap__desc">Patterns across projects: who is reliable on design, who unblocks others, load balance.</div>
+      </div>
+    </div>
+    <p class="slide__body reveal" style="margin-top:clamp(28px,4vh,40px);max-width:640px;">
+      Cohort turns the chaos of student team work into owners, deadlines, and a record everyone can trust. Built as a product people would actually use — not another demo.
+    </p>
+  </section>
+
+</div>
+
+<script>
+function autoFit() {
+  document.querySelectorAll('.slide__kpi-val').forEach(function(el) {
+    if (el.scrollWidth > el.clientWidth) {
+      var s = el.clientWidth / el.scrollWidth;
+      el.style.transform = 'scale(' + s + ')';
+      el.style.transformOrigin = 'left top';
+    }
+  });
+  document.querySelectorAll('.slide--quote blockquote').forEach(function(el) {
+    var len = el.textContent.trim().length;
+    if (len > 100) {
+      var scale = Math.max(0.5, 100 / len);
+      var fs = parseFloat(getComputedStyle(el).fontSize);
+      el.style.fontSize = Math.max(16, Math.round(fs * scale)) + 'px';
+    }
+  });
+}
+
+function SlideEngine() {
+  this.deck = document.querySelector('.deck');
+  this.slides = [].slice.call(document.querySelectorAll('.slide'));
+  this.current = 0;
+  this.total = this.slides.length;
+  this.buildChrome();
+  this.bindEvents();
+  this.observe();
+  this.update();
+}
+SlideEngine.prototype.buildChrome = function() {
+  var bar = document.createElement('div');
+  bar.className = 'deck-progress';
+  document.body.appendChild(bar);
+  this.bar = bar;
+
+  var dots = document.createElement('div');
+  dots.className = 'deck-dots';
+  var self = this;
+  this.slides.forEach(function(_, i) {
+    var d = document.createElement('button');
+    d.className = 'deck-dot';
+    d.title = 'Slide ' + (i + 1);
+    d.onclick = function() { self.goTo(i); };
+    dots.appendChild(d);
+  });
+  document.body.appendChild(dots);
+  this.dots = [].slice.call(dots.children);
+
+  var ctr = document.createElement('div');
+  ctr.className = 'deck-counter';
+  document.body.appendChild(ctr);
+  this.counter = ctr;
+
+  var hints = document.createElement('div');
+  hints.className = 'deck-hints';
+  hints.textContent = '\u2190 \u2192 or scroll to navigate';
+  document.body.appendChild(hints);
+  this.hints = hints;
+  this.hintTimer = setTimeout(function() { hints.classList.add('faded'); }, 4000);
+};
+SlideEngine.prototype.bindEvents = function() {
+  var self = this;
+  document.addEventListener('keydown', function(e) {
+    if (e.target.closest('.mermaid-wrap,.table-scroll,.code-scroll,input,textarea,[contenteditable]')) return;
+    if (['ArrowDown', 'ArrowRight', ' ', 'PageDown'].indexOf(e.key) > -1) { e.preventDefault(); self.next(); }
+    else if (['ArrowUp', 'ArrowLeft', 'PageUp'].indexOf(e.key) > -1) { e.preventDefault(); self.prev(); }
+    else if (e.key === 'Home') { e.preventDefault(); self.goTo(0); }
+    else if (e.key === 'End') { e.preventDefault(); self.goTo(self.total - 1); }
+    self.fadeHints();
+  });
+  var tY;
+  this.deck.addEventListener('touchstart', function(e) { tY = e.touches[0].clientY; }, { passive: true });
+  this.deck.addEventListener('touchend', function(e) {
+    var dy = tY - e.changedTouches[0].clientY;
+    if (Math.abs(dy) > 50) { dy > 0 ? self.next() : self.prev(); }
+  });
+};
+SlideEngine.prototype.observe = function() {
+  var self = this;
+  var obs = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        entry.target.classList.add('visible');
+        self.current = self.slides.indexOf(entry.target);
+        self.update();
+      }
+    });
+  }, { threshold: 0.5 });
+  this.slides.forEach(function(s) { obs.observe(s); });
+};
+SlideEngine.prototype.goTo = function(i) {
+  this.slides[Math.max(0, Math.min(i, this.total - 1))].scrollIntoView({ behavior: 'smooth' });
+};
+SlideEngine.prototype.next = function() { if (this.current < this.total - 1) this.goTo(this.current + 1); };
+SlideEngine.prototype.prev = function() { if (this.current > 0) this.goTo(this.current - 1); };
+SlideEngine.prototype.update = function() {
+  this.bar.style.width = ((this.current + 1) / this.total * 100) + '%';
+  var c = this.current;
+  this.dots.forEach(function(d, i) { d.classList.toggle('active', i === c); });
+  this.counter.textContent = (this.current + 1) + ' / ' + this.total;
+};
+SlideEngine.prototype.fadeHints = function() {
+  clearTimeout(this.hintTimer);
+  this.hints.classList.add('faded');
+};
+
+document.addEventListener('DOMContentLoaded', function() {
+  autoFit();
+  new SlideEngine();
+});
+</script>
+</body>
+</html>
