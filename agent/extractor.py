@@ -25,7 +25,7 @@ load_dotenv()
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
 MOCK = os.environ.get("COHORT_MOCK", "").strip().lower() in ("1", "true", "yes")
-DEFAULT_MODEL = os.environ.get("COHORT_MODEL", "gemini-2.0-flash")
+DEFAULT_MODEL = os.environ.get("COHORT_MODEL", "gemini-3.6-flash")
 
 SYSTEM_PROMPT = """You are the extraction engine for Cohort, an AI workspace for student teams.
 Turn messy project input into a clean task board.
@@ -195,7 +195,7 @@ def extract_board(
             "Fix options:\n"
             "  1) Offline demo:  export COHORT_MOCK=1\n"
             "  2) Check key:     export GEMINI_API_KEY=...\n"
-            "  3) Try a model:   export COHORT_MODEL=gemini-2.0-flash\n"
+            "  3) Try a model:   export COHORT_MODEL=gemini-3.6-flash\n"
             "  4) Key page:      https://aistudio.google.com/app/apikey"
         ) from e
 

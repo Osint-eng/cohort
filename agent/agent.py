@@ -20,7 +20,7 @@ from .schemas import BoardProposal, ContributionEvent, Task, TaskStatus
 load_dotenv()
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
-DEFAULT_MODEL = os.environ.get("COHORT_MODEL", "gemini-2.0-flash")
+DEFAULT_MODEL = os.environ.get("COHORT_MODEL", "gemini-3.6-flash")
 MOCK = os.environ.get("COHORT_MOCK", "").strip().lower() in ("1", "true", "yes")
 
 
@@ -96,7 +96,6 @@ def draft_checkin_message(store: BoardStore) -> str:
         if status == "blocked" or (due and due < today and status != "done"):
             late_or_blocked.append(t)
     if not late_or_blocked:
-        # Still show open items so the demo is useful
         open_tasks = [t for t in store.list_tasks() if t.get("status") != "done"]
         if not open_tasks:
             return "All clear — nothing is late or blocked right now."
@@ -120,7 +119,6 @@ def draft_checkin_message(store: BoardStore) -> str:
 
 
 def _extract_task_id(msg: str) -> str | None:
-    """Prefer explicit task ids like t1 over person names."""
     m = re.search(r"\btask\s+(t\d+)\b", msg)
     if m:
         return m.group(1)
