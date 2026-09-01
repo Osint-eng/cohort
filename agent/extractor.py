@@ -1,8 +1,13 @@
-"""Cohort Task Extraction Agent (Hugging Face).
+"""Cohort Task Extraction Agent (OpenRouter + mock).
 
-Set token locally: export HF_TOKEN=hf_...
-Offline demo: export COHORT_MOCK=1
-Never commit the token.
+Set key locally only:
+  export OPENROUTER_API_KEY=sk-or-v1-...
+  # or put in .env (gitignored)
+
+Offline demo (no key needed):
+  export COHORT_MOCK=1
+
+Never commit the key.
 """
 
 from __future__ import annotations
@@ -18,18 +23,22 @@ from .schemas import BoardProposal
 
 load_dotenv()
 
-HF_TOKEN = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_API_KEY")
-MOCK = os.environ.get("COHORT_MOCK", "").strip() in ("1", "true", "yes")
+OPENROUTER_API_KEY = (
+    os.environ.get("OPENROUTER_API_KEY")
+    or os.environ.get("OPENAI_API_KEY")
+)
+MOCK = os.environ.get("COHORT_MOCK", "").strip().lower() in ("1", "true", "yes")
 
+# Prefer free / cheap models on OpenRouter. Override with COHORT_MODEL.
 DEFAULT_MODEL = os.environ.get(
-    "COHORT_HF_MODEL", "mistralai/Mistral-7B-Instruct-v0.3"
+    "COHORT_MODEL", "openrouter/free"
 )
 FALLBACK_MODELS = [
-    "mistralai/Mistral-7B-Instruct-v0.3",
-    "mistralai/Mistral-7B-Instruct-v0.2",
-    "HuggingFaceH4/zephyr-7b-beta",
-    "microsoft/Phi-3-mini-4k-instruct",
-    "google/gemma-2-2b-it",
+    "openrouter/free",
+    "meta-llama/llama-3.2-3b-instruct:free",
+    "google/gemma-2-9b-it:free",
+    "mistralai/mistral-7b-instruct:free",
+    "qwen/qwen-2.5-7b-instruct:free",
 ]
 
 SYSTEM_PROMPT = """You are the extraction engine for Cohort, an AI workspace for student teams.
@@ -129,14 +138,21 @@ def _mock_board(
 
 
 def _get_client():
-    from huggingface_hub import InferenceClient
+    from openai import OpenAI
 
-    if not HF_TOKEN:
+    if not OPENROUTER_API_KEY:
         raise RuntimeError(
-            "Missing HF token. export HF_TOKEN=hf_... "
-            "Or use offline mode: export COHORT_MOCK=1"
+            "Missing OPENROUTER_API_KEY. "
+            "export OPENROUTER_API_KEY=sk-or-v1-... or set COHORT_MOCK=1"
         )
-    return InferenceClient(token=HF_TOKEN)
+    return OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=OPENROUTER_API_KEY,
+        default_headers={
+            "HTTP-Referer": "https://github.com/Osint-eng/cohort",
+            "X-Title": "Cohort",
+        },
+    )
 
 
 def _extract_json(text: str) -> dict[str, Any]:
@@ -192,8 +208,9 @@ def extract_board(
     candidates: list[str] = []
     if model:
         candidates.append(model)
-    elif os.environ.get("COHORT_HF_MODEL"):
-        candidates.append(DEFAULT_MODEL)
+    env_model = os.environ.get("COHORT_MODEL")
+    if env_model and env_model not in candidates:
+        candidates.append(env_model)
     for m in FALLBACK_MODELS:
         if m not in candidates:
             candidates.append(m)
@@ -211,8 +228,9 @@ def extract_board(
         "All models failed. Last error: " + str(last_err) + "\n"
         "Fix options:\n"
         "  1) Offline demo:  export COHORT_MOCK=1\n"
-        "  2) Enable providers: https://huggingface.co/settings/inference-providers\n"
-        "  3) Try another model: export COHORT_HF_MODEL=..."
+        "  2) Check key:     export OPENROUTER_API_KEY=sk-or-v1-...\n"
+        "  3) Try a model:   export COHORT_MODEL=openrouter/free\n"
+        "  4) Models list:   https://openrouter.ai/models"
     )
 
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the Cohort board agent. Requires HF_TOKEN."""
+"""Run the Cohort board agent (OpenRouter or mock)."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ Alex owns API + matching. Demo Oct 12, final due Oct 15.
 
 
 def main() -> None:
-    print("1. Extracting board (Hugging Face)...")
+    print("1. Extracting board...")
     board = extract_board(
         SAMPLE,
         team_members=["Sam", "Priya", "Alex"],

@@ -1,42 +1,42 @@
-# Cohort AI Agent (Hugging Face)
+# Cohort Agent
 
-Structured task extraction and board agent via **Hugging Face Inference API**.
+Structured extraction + selective board agent for student team projects.
 
-## Setup
-
-1. Create a token: https://huggingface.co/settings/tokens  
-2. Set it **locally only** (never commit):
+## Setup (local only)
 
 ```bash
-export HF_TOKEN=hf_your_new_token_here
+pip install openai pydantic python-dotenv
+
+# Create .env (never commit this file)
+echo 'OPENROUTER_API_KEY=sk-or-v1-YOUR_KEY' > .env
 ```
 
-Or `.env` in repo root (gitignored):
+Get a key at https://openrouter.ai/keys — do not put it in git.
 
-```
-HF_TOKEN=hf_your_new_token_here
-```
-
-3. Install:
+## Run
 
 ```bash
-pip install huggingface_hub pydantic python-dotenv
-```
+# Offline demo (no key, no credits)
+export COHORT_MOCK=1
+python examples/run_extraction.py
+python examples/run_agent.py
 
-4. Run:
-
-```bash
+# Live via OpenRouter
+unset COHORT_MOCK
+set -a; source .env; set +a
 python examples/run_extraction.py
 python examples/run_agent.py
 ```
 
-Optional:
+Optional model override:
 
 ```bash
-export COHORT_HF_MODEL=Qwen/Qwen2.5-7B-Instruct
+export COHORT_MODEL=openrouter/free
+# or any free model slug from https://openrouter.ai/models
 ```
 
-## Security
+## Design
 
-If a token was pasted in chat or a public place, **revoke it** and create a new one.
-Never commit tokens to GitHub.
+- **Extraction** forces structured JSON (owners, dates, deps) — not essays.
+- **Board agent** only nags late/blocked work and writes a contribution log.
+- Mock mode always available so demos never depend on credits.

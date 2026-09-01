@@ -1,8 +1,8 @@
-"""Cohort Board Agent (Hugging Face).
+"""Cohort Board Agent (OpenRouter + mock).
 
-Set token locally: export HF_TOKEN=hf_...
+Set key locally: export OPENROUTER_API_KEY=sk-or-v1-...
 Offline: export COHORT_MOCK=1
-Never commit the token.
+Never commit the key.
 """
 
 from __future__ import annotations
@@ -19,9 +19,12 @@ from .schemas import BoardProposal, ContributionEvent, Task, TaskStatus
 
 load_dotenv()
 
-HF_TOKEN = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_API_KEY")
-DEFAULT_MODEL = os.environ.get("COHORT_HF_MODEL", "mistralai/Mistral-7B-Instruct-v0.3")
-MOCK = os.environ.get("COHORT_MOCK", "").strip() in ("1", "true", "yes")
+OPENROUTER_API_KEY = (
+    os.environ.get("OPENROUTER_API_KEY")
+    or os.environ.get("OPENAI_API_KEY")
+)
+DEFAULT_MODEL = os.environ.get("COHORT_MODEL", "openrouter/free")
+MOCK = os.environ.get("COHORT_MOCK", "").strip().lower() in ("1", "true", "yes")
 
 
 class BoardStore:
@@ -32,7 +35,6 @@ class BoardStore:
     def list_tasks(self) -> list[dict[str, Any]]:
         if not self.board:
             return []
-        # mode=json so enums become "todo" not "TaskStatus.TODO"
         return [t.model_dump(mode="json") for t in self.board.tasks]
 
     def get_task(self, task_id: str) -> Task | None:
@@ -51,7 +53,9 @@ class BoardStore:
         data.update(fields)
         updated = Task.model_validate(data)
         assert self.board is not None
-        self.board.tasks = [updated if t.id == task_id else t for t in self.board.tasks]
+        self.board.tasks = [
+            updated if t.id == task_id else t for t in self.board.tasks
+        ]
         return updated
 
     def log(self, event: ContributionEvent) -> None:
@@ -61,11 +65,21 @@ class BoardStore:
 
 
 def _client():
-    from huggingface_hub import InferenceClient
+    from openai import OpenAI
 
-    if not HF_TOKEN:
-        raise RuntimeError("Missing HF token. export HF_TOKEN=hf_... or COHORT_MOCK=1")
-    return InferenceClient(token=HF_TOKEN)
+    if not OPENROUTER_API_KEY:
+        raise RuntimeError(
+            "Missing OPENROUTER_API_KEY. "
+            "export OPENROUTER_API_KEY=sk-or-v1-... or COHORT_MOCK=1"
+        )
+    return OpenAI(
+        base_url="https://openrouter.ai/api/v1",
+        api_key=OPENROUTER_API_KEY,
+        default_headers={
+            "HTTP-Referer": "https://github.com/Osint-eng/cohort",
+            "X-Title": "Cohort",
+        },
+    )
 
 
 def _chat(client: Any, system: str, user: str, model: str) -> str:
@@ -124,7 +138,10 @@ def run_agent(
     model = model or DEFAULT_MODEL
     msg = user_message.strip().lower()
 
-    if any(k in msg for k in ("check-in", "checkin", "nag", "status update", "what's late")):
+    if any(
+        k in msg
+        for k in ("check-in", "checkin", "nag", "status update", "what's late")
+    ):
         return draft_checkin_message(store)
 
     if "list" in msg and "task" in msg:
@@ -151,21 +168,28 @@ def run_agent(
     if "blocked" in msg:
         tid = _extract_task_id(msg)
         if not tid:
-            return "Could not find a task id (e.g. t1). Try: Mark task t2 blocked because API down."
+            return (
+                "Could not find a task id (e.g. t1). "
+                "Try: Mark task t2 blocked because API down."
+            )
         reason_m = re.search(r"blocked(?:\s+because\s+(.+))?", msg)
-        reason = (reason_m.group(1) if reason_m and reason_m.group(1) else "unspecified").strip()
+        reason = (
+            reason_m.group(1) if reason_m and reason_m.group(1) else "unspecified"
+        ).strip()
         actor_m = re.search(r"\b([A-Z][a-z]+)\b", user_message)
         actor = actor_m.group(1) if actor_m else "someone"
         task = store.update_task(tid, status=TaskStatus.BLOCKED)
         if not task:
             return f"Task {tid} not found."
-        store.log(ContributionEvent(actor=actor, action="blocked", task_id=tid, note=reason))
+        store.log(
+            ContributionEvent(actor=actor, action="blocked", task_id=tid, note=reason)
+        )
         return f"Marked {tid} as blocked ({reason}). Logged by {actor}."
 
     if MOCK:
         return (
-            "(Mock mode) I only handle check-in, list tasks, mark complete, and mark blocked offline. "
-            "Unset COHORT_MOCK to use the live model for free-form questions."
+            "(Mock mode) I only handle check-in, list tasks, mark complete, "
+            "and mark blocked offline. Unset COHORT_MOCK to use the live model."
         )
 
     client = client or _client()
@@ -174,5 +198,8 @@ def run_agent(
         "You are the Cohort board agent for a student team. "
         "Be concise. Only discuss the existing board. Do not invent tasks."
     )
-    user = f"Current board:\n{board_snapshot}\n\nUser message: {user_message}\n\nReply helpfully."
+    user = (
+        f"Current board:\n{board_snapshot}\n\n"
+        f"User message: {user_message}\n\nReply helpfully."
+    )
     return _chat(client, system, user, model)

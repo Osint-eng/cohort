@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract a Cohort task board via Hugging Face. Requires HF_TOKEN."""
+"""Extract a Cohort task board via OpenRouter (or mock)."""
 
 from __future__ import annotations
 
@@ -30,7 +30,7 @@ Priya: Demo video on the 12th.
 
 
 def main() -> None:
-    print("Extracting board (Hugging Face)...\n")
+    print("Extracting board...\n")
     board = extract_board(
         SAMPLE_BRIEF,
         team_members=["Sam", "Priya", "Alex"],
