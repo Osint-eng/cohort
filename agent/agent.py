@@ -1,6 +1,6 @@
-"""Cohort Board Agent (OpenRouter + mock).
+"""Cohort Board Agent (Gemini + mock).
 
-Set key locally: export OPENROUTER_API_KEY=sk-or-v1-...
+Set key locally: export GEMINI_API_KEY=...
 Offline: export COHORT_MOCK=1
 Never commit the key.
 """
@@ -19,11 +19,8 @@ from .schemas import BoardProposal, ContributionEvent, Task, TaskStatus
 
 load_dotenv()
 
-OPENROUTER_API_KEY = (
-    os.environ.get("OPENROUTER_API_KEY")
-    or os.environ.get("OPENAI_API_KEY")
-)
-DEFAULT_MODEL = os.environ.get("COHORT_MODEL", "openrouter/free")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
+DEFAULT_MODEL = os.environ.get("COHORT_MODEL", "gemini-2.0-flash")
 MOCK = os.environ.get("COHORT_MOCK", "").strip().lower() in ("1", "true", "yes")
 
 
@@ -65,35 +62,28 @@ class BoardStore:
 
 
 def _client():
-    from openai import OpenAI
-
-    if not OPENROUTER_API_KEY:
+    if not GEMINI_API_KEY:
         raise RuntimeError(
-            "Missing OPENROUTER_API_KEY. "
-            "export OPENROUTER_API_KEY=sk-or-v1-... or COHORT_MOCK=1"
+            "Missing GEMINI_API_KEY. "
+            "export GEMINI_API_KEY=... or COHORT_MOCK=1"
         )
-    return OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=OPENROUTER_API_KEY,
-        default_headers={
-            "HTTP-Referer": "https://github.com/Osint-eng/cohort",
-            "X-Title": "Cohort",
-        },
-    )
+    from google import genai
+
+    return genai.Client(api_key=GEMINI_API_KEY)
 
 
 def _chat(client: Any, system: str, user: str, model: str) -> str:
     try:
-        completion = client.chat.completions.create(
+        response = client.models.generate_content(
             model=model,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            max_tokens=1024,
-            temperature=0.3,
+            contents=user,
+            config={
+                "system_instruction": system,
+                "temperature": 0.3,
+                "max_output_tokens": 1024,
+            },
         )
-        return completion.choices[0].message.content or ""
+        return response.text or ""
     except Exception as e:
         return f"(model unavailable: {e})"
 
@@ -106,12 +96,24 @@ def draft_checkin_message(store: BoardStore) -> str:
         if status == "blocked" or (due and due < today and status != "done"):
             late_or_blocked.append(t)
     if not late_or_blocked:
-        return "All clear — nothing is late or blocked right now."
+        # Still show open items so the demo is useful
+        open_tasks = [t for t in store.list_tasks() if t.get("status") != "done"]
+        if not open_tasks:
+            return "All clear — nothing is late or blocked right now."
+        lines = ["Quick check-in — items needing attention:\n"]
+        for t in open_tasks:
+            owner = t.get("suggested_owner") or "unassigned"
+            lines.append(
+                f"[{t['id']}] {t['title']} (@{owner}) — {t.get('status')}, due {t.get('due_date') or 'no date'}"
+            )
+        lines.append("\nReply with status or blockers. Thanks!")
+        return "\n".join(lines)
+
     lines = ["Quick check-in — items needing attention:\n"]
     for t in late_or_blocked:
         owner = t.get("suggested_owner") or "unassigned"
         lines.append(
-            f"- [{t['id']}] {t['title']} (@{owner}) — {t.get('status')}, due {t.get('due_date') or 'no date'}"
+            f"[{t['id']}] {t['title']} (@{owner}) — {t.get('status')}, due {t.get('due_date') or 'no date'}"
         )
     lines.append("\nReply with status or blockers. Thanks!")
     return "\n".join(lines)

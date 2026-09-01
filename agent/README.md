@@ -1,42 +1,39 @@
 # Cohort Agent
 
-Structured extraction + selective board agent for student team projects.
+AI layer for Cohort: structured task extraction + selective board agent.
 
-## Setup (local only)
+## Modes
+
+| Mode | How |
+|------|-----|
+| Offline demo | `export COHORT_MOCK=1` |
+| Live Gemini | `export GEMINI_API_KEY=...` (from [Google AI Studio](https://aistudio.google.com/app/apikey)) |
+
+Never commit API keys. Put them only in a local `.env` (gitignored).
+
+## Install
 
 ```bash
-pip install openai pydantic python-dotenv
-
-# Create .env (never commit this file)
-echo 'OPENROUTER_API_KEY=sk-or-v1-YOUR_KEY' > .env
+pip install google-genai pydantic python-dotenv
 ```
-
-Get a key at https://openrouter.ai/keys — do not put it in git.
 
 ## Run
 
 ```bash
-# Offline demo (no key, no credits)
+# Offline (recommended for demos)
 export COHORT_MOCK=1
 python examples/run_extraction.py
 python examples/run_agent.py
 
-# Live via OpenRouter
+# Live Gemini
 unset COHORT_MOCK
-set -a; source .env; set +a
+set -a; source .env; set +a   # .env contains GEMINI_API_KEY=...
 python examples/run_extraction.py
 python examples/run_agent.py
 ```
 
-Optional model override:
-
-```bash
-export COHORT_MODEL=openrouter/free
-# or any free model slug from https://openrouter.ai/models
-```
-
 ## Design
 
-- **Extraction** forces structured JSON (owners, dates, deps) — not essays.
-- **Board agent** only nags late/blocked work and writes a contribution log.
-- Mock mode always available so demos never depend on credits.
+- **Extraction** forces structured JSON (owners, due dates, dependencies).
+- **Board agent** only nags late/blocked items and writes a contribution log.
+- The product is the workflow, not the model.

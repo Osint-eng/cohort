@@ -1,7 +1,7 @@
-"""Cohort Task Extraction Agent (OpenRouter + mock).
+"""Cohort Task Extraction Agent (Gemini + mock).
 
 Set key locally only:
-  export OPENROUTER_API_KEY=sk-or-v1-...
+  export GEMINI_API_KEY=...
   # or put in .env (gitignored)
 
 Offline demo (no key needed):
@@ -23,23 +23,9 @@ from .schemas import BoardProposal
 
 load_dotenv()
 
-OPENROUTER_API_KEY = (
-    os.environ.get("OPENROUTER_API_KEY")
-    or os.environ.get("OPENAI_API_KEY")
-)
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY")
 MOCK = os.environ.get("COHORT_MOCK", "").strip().lower() in ("1", "true", "yes")
-
-# Prefer free / cheap models on OpenRouter. Override with COHORT_MODEL.
-DEFAULT_MODEL = os.environ.get(
-    "COHORT_MODEL", "openrouter/free"
-)
-FALLBACK_MODELS = [
-    "openrouter/free",
-    "meta-llama/llama-3.2-3b-instruct:free",
-    "google/gemma-2-9b-it:free",
-    "mistralai/mistral-7b-instruct:free",
-    "qwen/qwen-2.5-7b-instruct:free",
-]
+DEFAULT_MODEL = os.environ.get("COHORT_MODEL", "gemini-2.0-flash")
 
 SYSTEM_PROMPT = """You are the extraction engine for Cohort, an AI workspace for student teams.
 Turn messy project input into a clean task board.
@@ -137,24 +123,6 @@ def _mock_board(
     return BoardProposal.model_validate(data)
 
 
-def _get_client():
-    from openai import OpenAI
-
-    if not OPENROUTER_API_KEY:
-        raise RuntimeError(
-            "Missing OPENROUTER_API_KEY. "
-            "export OPENROUTER_API_KEY=sk-or-v1-... or set COHORT_MOCK=1"
-        )
-    return OpenAI(
-        base_url="https://openrouter.ai/api/v1",
-        api_key=OPENROUTER_API_KEY,
-        default_headers={
-            "HTTP-Referer": "https://github.com/Osint-eng/cohort",
-            "X-Title": "Cohort",
-        },
-    )
-
-
 def _extract_json(text: str) -> dict[str, Any]:
     text = text.strip()
     fence = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
@@ -166,17 +134,29 @@ def _extract_json(text: str) -> dict[str, Any]:
     return json.loads(text[start : end + 1])
 
 
+def _get_client():
+    if not GEMINI_API_KEY:
+        raise RuntimeError(
+            "Missing GEMINI_API_KEY.\n"
+            "  export GEMINI_API_KEY=...   (from https://aistudio.google.com/app/apikey)\n"
+            "  or offline: export COHORT_MOCK=1"
+        )
+    from google import genai
+
+    return genai.Client(api_key=GEMINI_API_KEY)
+
+
 def _chat_once(client: Any, model: str, user_content: str) -> str:
-    completion = client.chat.completions.create(
+    response = client.models.generate_content(
         model=model,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_content},
-        ],
-        max_tokens=2048,
-        temperature=0.2,
+        contents=user_content,
+        config={
+            "system_instruction": SYSTEM_PROMPT,
+            "temperature": 0.2,
+            "max_output_tokens": 2048,
+        },
     )
-    return completion.choices[0].message.content or ""
+    return response.text or ""
 
 
 def extract_board(
@@ -192,6 +172,7 @@ def extract_board(
         return _mock_board(team_members, project_deadline)
 
     client = client or _get_client()
+    model = model or DEFAULT_MODEL
 
     ctx = []
     if team_members:
@@ -205,33 +186,18 @@ def extract_board(
         + "\n</source>\n\nExtract a task board. Reply with JSON only."
     )
 
-    candidates: list[str] = []
-    if model:
-        candidates.append(model)
-    env_model = os.environ.get("COHORT_MODEL")
-    if env_model and env_model not in candidates:
-        candidates.append(env_model)
-    for m in FALLBACK_MODELS:
-        if m not in candidates:
-            candidates.append(m)
-
-    last_err: Exception | None = None
-    for m in candidates:
-        try:
-            raw = _chat_once(client, m, user_content)
-            return BoardProposal.model_validate(_extract_json(raw))
-        except Exception as e:
-            last_err = e
-            continue
-
-    raise RuntimeError(
-        "All models failed. Last error: " + str(last_err) + "\n"
-        "Fix options:\n"
-        "  1) Offline demo:  export COHORT_MOCK=1\n"
-        "  2) Check key:     export OPENROUTER_API_KEY=sk-or-v1-...\n"
-        "  3) Try a model:   export COHORT_MODEL=openrouter/free\n"
-        "  4) Models list:   https://openrouter.ai/models"
-    )
+    try:
+        raw = _chat_once(client, model, user_content)
+        return BoardProposal.model_validate(_extract_json(raw))
+    except Exception as e:
+        raise RuntimeError(
+            f"Gemini extraction failed: {e}\n"
+            "Fix options:\n"
+            "  1) Offline demo:  export COHORT_MOCK=1\n"
+            "  2) Check key:     export GEMINI_API_KEY=...\n"
+            "  3) Try a model:   export COHORT_MODEL=gemini-2.0-flash\n"
+            "  4) Key page:      https://aistudio.google.com/app/apikey"
+        ) from e
 
 
 def extract_board_as_dict(source_text: str, **kwargs: Any) -> dict[str, Any]:
