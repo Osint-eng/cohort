@@ -31,7 +31,7 @@ SYSTEM_PROMPT = """You are the extraction engine for Cohort, an AI workspace for
 Turn messy project input into a clean task board.
 Rules: structured work items only; verb-led titles; owners only if named in source;
 due dates YYYY-MM-DD when clear; capture dependencies; open questions if unsure.
-Respond with ONLY valid JSON (no markdown):
+Respond with ONLY valid JSON (no markdown, no commentary):
 {
   "project_summary": "string",
   "tasks": [{
@@ -124,14 +124,33 @@ def _mock_board(
 
 
 def _extract_json(text: str) -> dict[str, Any]:
-    text = text.strip()
+    """Best-effort JSON extraction from model output."""
+    text = (text or "").strip()
+    if not text:
+        raise ValueError("Empty model response")
+
+    # Strip markdown fences
     fence = re.search(r"```(?:json)?\s*([\s\S]*?)```", text)
     if fence:
         text = fence.group(1).strip()
+
+    # Take outermost object
     start, end = text.find("{"), text.rfind("}")
     if start == -1 or end <= start:
-        raise ValueError(f"No JSON found:\n{text[:500]}")
-    return json.loads(text[start : end + 1])
+        raise ValueError(f"No JSON object found:\n{text[:500]}")
+    chunk = text[start : end + 1]
+
+    # Common model mistakes: trailing commas
+    chunk = re.sub(r",\s*([\]}])", r"\1", chunk)
+
+    try:
+        return json.loads(chunk)
+    except json.JSONDecodeError:
+        # Last resort: try to fix single quotes -> double quotes for keys
+        fixed = re.sub(r"(?<=\{|,)\s*'([^']+)'\s*:", r' "\1":', chunk)
+        fixed = re.sub(r":\s*'([^']*)'", r': "\1"', fixed)
+        fixed = re.sub(r",\s*([\]}])", r"\1", fixed)
+        return json.loads(fixed)
 
 
 def _get_client():
@@ -147,13 +166,15 @@ def _get_client():
 
 
 def _chat_once(client: Any, model: str, user_content: str) -> str:
+    # Force JSON output so parsing is reliable
     response = client.models.generate_content(
         model=model,
         contents=user_content,
         config={
             "system_instruction": SYSTEM_PROMPT,
-            "temperature": 0.2,
+            "temperature": 0.1,
             "max_output_tokens": 2048,
+            "response_mime_type": "application/json",
         },
     )
     return response.text or ""
@@ -188,7 +209,8 @@ def extract_board(
 
     try:
         raw = _chat_once(client, model, user_content)
-        return BoardProposal.model_validate(_extract_json(raw))
+        data = _extract_json(raw)
+        return BoardProposal.model_validate(data)
     except Exception as e:
         raise RuntimeError(
             f"Gemini extraction failed: {e}\n"
