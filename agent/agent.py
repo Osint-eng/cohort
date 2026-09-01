@@ -1,6 +1,7 @@
 """Cohort Board Agent (Hugging Face).
 
 Set token locally: export HF_TOKEN=hf_...
+Offline: export COHORT_MOCK=1
 Never commit the token.
 """
 
@@ -13,14 +14,14 @@ from datetime import date, datetime, timezone
 from typing import Any
 
 from dotenv import load_dotenv
-from huggingface_hub import InferenceClient
 
 from .schemas import BoardProposal, ContributionEvent, Task, TaskStatus
 
 load_dotenv()
 
 HF_TOKEN = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_API_KEY")
-DEFAULT_MODEL = os.environ.get("COHORT_HF_MODEL", "Qwen/Qwen2.5-7B-Instruct")
+DEFAULT_MODEL = os.environ.get("COHORT_HF_MODEL", "mistralai/Mistral-7B-Instruct-v0.3")
+MOCK = os.environ.get("COHORT_MOCK", "").strip() in ("1", "true", "yes")
 
 
 class BoardStore:
@@ -31,7 +32,8 @@ class BoardStore:
     def list_tasks(self) -> list[dict[str, Any]]:
         if not self.board:
             return []
-        return [t.model_dump() for t in self.board.tasks]
+        # mode=json so enums become "todo" not "TaskStatus.TODO"
+        return [t.model_dump(mode="json") for t in self.board.tasks]
 
     def get_task(self, task_id: str) -> Task | None:
         if not self.board:
@@ -45,7 +47,7 @@ class BoardStore:
         task = self.get_task(task_id)
         if not task:
             return None
-        data = task.model_dump()
+        data = task.model_dump(mode="json")
         data.update(fields)
         updated = Task.model_validate(data)
         assert self.board is not None
@@ -58,13 +60,15 @@ class BoardStore:
         self.contribution_log.append(event)
 
 
-def _client() -> InferenceClient:
+def _client():
+    from huggingface_hub import InferenceClient
+
     if not HF_TOKEN:
-        raise RuntimeError("Missing HF token. export HF_TOKEN=hf_...")
+        raise RuntimeError("Missing HF token. export HF_TOKEN=hf_... or COHORT_MOCK=1")
     return InferenceClient(token=HF_TOKEN)
 
 
-def _chat(client: InferenceClient, system: str, user: str, model: str) -> str:
+def _chat(client: Any, system: str, user: str, model: str) -> str:
     try:
         completion = client.chat.completions.create(
             model=model,
@@ -76,11 +80,8 @@ def _chat(client: InferenceClient, system: str, user: str, model: str) -> str:
             temperature=0.3,
         )
         return completion.choices[0].message.content or ""
-    except Exception:
-        prompt = system + "\n\nUser: " + user + "\n\nAssistant:"
-        return client.text_generation(
-            prompt, model=model, max_new_tokens=1024, temperature=0.3
-        )
+    except Exception as e:
+        return f"(model unavailable: {e})"
 
 
 def draft_checkin_message(store: BoardStore) -> str:
@@ -102,12 +103,23 @@ def draft_checkin_message(store: BoardStore) -> str:
     return "\n".join(lines)
 
 
+def _extract_task_id(msg: str) -> str | None:
+    """Prefer explicit task ids like t1 over person names."""
+    m = re.search(r"\btask\s+(t\d+)\b", msg)
+    if m:
+        return m.group(1)
+    m = re.search(r"\b(t\d+)\b", msg)
+    if m:
+        return m.group(1)
+    return None
+
+
 def run_agent(
     user_message: str,
     store: BoardStore,
     *,
     model: str | None = None,
-    client: InferenceClient | None = None,
+    client: Any = None,
 ) -> str:
     model = model or DEFAULT_MODEL
     msg = user_message.strip().lower()
@@ -124,11 +136,10 @@ def run_agent(
             for t in tasks
         )
 
-    complete_match = re.search(
-        r"(?:mark\s+)?(?:task\s+)?([a-z0-9_-]+)\s+(?:as\s+)?(?:complete|done|finished)", msg
-    )
-    if complete_match or ("finished" in msg and re.search(r"\b(t\d+)\b", msg)):
-        tid = complete_match.group(1) if complete_match else re.search(r"\b(t\d+)\b", msg).group(1)
+    if any(k in msg for k in ("complete", "done", "finished")):
+        tid = _extract_task_id(msg)
+        if not tid:
+            return "Could not find a task id (e.g. t1). Try: Mark task t1 complete."
         actor_m = re.search(r"\b([A-Z][a-z]+)\b", user_message)
         actor = actor_m.group(1) if actor_m else "someone"
         task = store.update_task(tid, status=TaskStatus.DONE)
@@ -137,12 +148,12 @@ def run_agent(
         store.log(ContributionEvent(actor=actor, action="completed", task_id=tid))
         return f"Marked {tid} ({task.title}) as done. Logged contribution by {actor}."
 
-    blocked_match = re.search(
-        r"(?:mark\s+)?(?:task\s+)?([a-z0-9_-]+)\s+(?:as\s+)?blocked(?:\s+because\s+(.+))?", msg
-    )
-    if blocked_match:
-        tid = blocked_match.group(1)
-        reason = (blocked_match.group(2) or "unspecified").strip()
+    if "blocked" in msg:
+        tid = _extract_task_id(msg)
+        if not tid:
+            return "Could not find a task id (e.g. t1). Try: Mark task t2 blocked because API down."
+        reason_m = re.search(r"blocked(?:\s+because\s+(.+))?", msg)
+        reason = (reason_m.group(1) if reason_m and reason_m.group(1) else "unspecified").strip()
         actor_m = re.search(r"\b([A-Z][a-z]+)\b", user_message)
         actor = actor_m.group(1) if actor_m else "someone"
         task = store.update_task(tid, status=TaskStatus.BLOCKED)
@@ -150,6 +161,12 @@ def run_agent(
             return f"Task {tid} not found."
         store.log(ContributionEvent(actor=actor, action="blocked", task_id=tid, note=reason))
         return f"Marked {tid} as blocked ({reason}). Logged by {actor}."
+
+    if MOCK:
+        return (
+            "(Mock mode) I only handle check-in, list tasks, mark complete, and mark blocked offline. "
+            "Unset COHORT_MOCK to use the live model for free-form questions."
+        )
 
     client = client or _client()
     board_snapshot = json.dumps(store.list_tasks(), indent=2)
