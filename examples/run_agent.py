@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the Cohort board agent (OpenRouter or mock)."""
+"""Run the full Cohort agent loop (Gemini or mock)."""
 
 from __future__ import annotations
 

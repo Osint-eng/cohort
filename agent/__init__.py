@@ -1,4 +1,4 @@
-"""Cohort AI agent — OpenRouter structured extraction + board tools."""
+"""Cohort AI agent — structured extraction + board tools."""
 
 from .extractor import extract_board, extract_board_as_dict
 from .agent import BoardStore, run_agent, draft_checkin_message

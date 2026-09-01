@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Extract a Cohort task board via OpenRouter (or mock)."""
+"""Extract a Cohort task board (Gemini or mock)."""
 
 from __future__ import annotations
 

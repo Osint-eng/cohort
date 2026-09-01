@@ -1,39 +1,46 @@
 # Cohort Agent
 
-AI layer for Cohort: structured task extraction + selective board agent.
+Complete AI agent for student group projects.
+
+## What it does
+
+1. **Extraction agent** — messy brief/chat → structured task board (Pydantic-validated)
+2. **Board agent** — selective check-ins, mark complete/blocked, contribution log
+3. **Mock mode** — full offline demo with `COHORT_MOCK=1`
 
 ## Modes
 
 | Mode | How |
 |------|-----|
-| Offline demo | `export COHORT_MOCK=1` |
-| Live Gemini | `export GEMINI_API_KEY=...` (from [Google AI Studio](https://aistudio.google.com/app/apikey)) |
+| Offline | `export COHORT_MOCK=1` |
+| Live Gemini | `export GEMINI_API_KEY=...` (local `.env` only) |
 
-Never commit API keys. Put them only in a local `.env` (gitignored).
+Never commit API keys.
 
 ## Install
 
 ```bash
-pip install google-genai pydantic python-dotenv
+pip install -r requirements.txt
 ```
 
 ## Run
 
 ```bash
-# Offline (recommended for demos)
+# Offline
 export COHORT_MOCK=1
 python examples/run_extraction.py
 python examples/run_agent.py
 
-# Live Gemini
+# Live
 unset COHORT_MOCK
-set -a; source .env; set +a   # .env contains GEMINI_API_KEY=...
+set -a; source .env; set +a
 python examples/run_extraction.py
 python examples/run_agent.py
 ```
 
 ## Design
 
-- **Extraction** forces structured JSON (owners, due dates, dependencies).
-- **Board agent** only nags late/blocked items and writes a contribution log.
-- The product is the workflow, not the model.
+- Structured output only (tasks, owners, dates, dependencies)
+- Selective intervention (late / blocked only)
+- Contribution log for accountability
+- Human stays in control
