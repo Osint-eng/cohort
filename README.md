@@ -60,6 +60,7 @@ The model is a tool. The product is the workflow.
 | Hosting      | Vercel (PaaS)                   |
 | Auth & Data  | Managed BaaS                    |
 | Models       | API (structured extraction)     |
+| Agent        | Claude tool-use (see `agent/`)  |
 
 The product is the workflow, not the model.
 
@@ -81,34 +82,46 @@ Brief / chat / notes
   Contribution log
 ```
 
+## AI Agent (Claude)
+
+The core intelligence lives in `agent/`, following Anthropic Claude Cookbook patterns (tool-use structured extraction + multi-turn agent loop).
+
+```bash
+pip install anthropic pydantic python-dotenv
+export ANTHROPIC_API_KEY=sk-ant-...
+
+python examples/run_extraction.py   # paste → board
+python examples/run_agent.py        # selective nags + contribution log
+```
+
+See [`agent/README.md`](agent/README.md) for design principles and extension points.
+
 ## Getting started
 
 ```bash
-# Clone
 git clone https://github.com/Osint-eng/cohort.git
 cd cohort
 
-# Install
-pnpm install
-
-# Environment
-cp .env.example .env.local
-# Fill in required keys
-
-# Develop
-pnpm dev
+pip install anthropic pydantic python-dotenv
+export ANTHROPIC_API_KEY=sk-ant-...
+python examples/run_extraction.py
 ```
 
-Open the local URL, create a project, and paste a sample brief to see the board generation flow.
-
-## Project structure (high level)
+## Project structure
 
 ```
 /
-├── apps/web          # TanStack Start + React frontend
-├── packages/         # Shared types, UI, agent helpers
-├── docs/             # Architecture notes
-├── docs/presentation.html  # Pitch deck
+├── agent/                 # Claude extraction + board agent
+│   ├── schemas.py
+│   ├── extractor.py
+│   ├── agent.py
+│   └── README.md
+├── examples/
+│   ├── run_extraction.py
+│   └── run_agent.py
+├── docs/
+│   ├── presentation.html  # Pitch deck
+│   └── SUBMISSION.md
 └── README.md
 ```
 
@@ -122,10 +135,11 @@ Open the local URL, create a project, and paste a sample brief to see the board 
 
 ## Status
 
-Draft / in-progress for the AI Builders Hackathon.
+In progress for the AI Builders Hackathon.
 
-- Core loop and public demo: in progress
-- Live URL, final repo structure, and architecture docs will be updated before the submission deadline
+- Core agent loop: shipped (`agent/`)
+- Public demo UI: in progress
+- Live URL and full product code will land before the deadline
 
 ## License
 
