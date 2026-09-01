@@ -1,53 +1,14 @@
 # Cohort
 
-**AI agent that runs student group projects.**
+**Live AI agent that runs student group projects.**
 
-Paste a brief, chat export, or meeting notes. Cohort extracts tasks, assigns owners, sets due dates, nags only what is late or blocked, and keeps a contribution log your team (and your professor) can trust.
+Paste a brief or team chat. Cohort builds a task board, nags only what is late, and keeps a contribution log your professor can trust.
 
-It does not write the assignment. It runs the project.
+It does not write the homework. It runs the project.
 
 ---
 
-## The problem
-
-Every group project starts the same way:
-
-- A WhatsApp or Discord dump
-- A half-empty Google Doc
-- Three people who each think someone else owns the slides
-
-By week three the work is uneven, the deadline is close, and nobody can show the professor who actually did what. The person who always herds the group burns out.
-
-Students do not need another chatbot. They need an **agent** that turns chaos into owners, deadlines, and a fair record.
-
-## What Cohort is
-
-Cohort is a complete AI agent for student teams. Not a SaaS shell. Not a prompt demo.
-
-```
-Brief / chat / notes
-        ↓
-  Extraction agent
-  (structured task board)
-        ↓
-  Board agent
-  (check-ins, mark done/blocked)
-        ↓
-  Contribution log
-  (who did what)
-```
-
-### Capabilities
-
-| Capability | What it does |
-|------------|--------------|
-| **Extraction agent** | Turns messy input into structured tasks with owners, due dates, dependencies |
-| **Board agent** | Selective check-ins — only late or blocked items |
-| **Actions** | Mark complete, mark blocked, list tasks |
-| **Contribution log** | Records who completed / blocked / unblocked work |
-| **Mock mode** | Full offline demo with no API key |
-
-## Quick start
+## Live agent (browser)
 
 ```bash
 git clone https://github.com/Osint-eng/cohort.git
@@ -56,80 +17,76 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-# Offline demo (no key needed)
+# Offline demo (no API key)
 export COHORT_MOCK=1
-python examples/run_extraction.py
-python examples/run_agent.py
+python app.py
+```
 
-# Live Gemini
-# Put GEMINI_API_KEY=... in a local .env (never commit it)
+Open **http://127.0.0.1:7860**
+
+1. Paste a project brief or chat log → board appears  
+2. Chat: `check-in` · `list tasks` · `mark t1 complete` · `mark t2 blocked because API down`  
+3. Contribution log updates live  
+
+### Live with Gemini
+
+```bash
+# .env (gitignored)
+# GEMINI_API_KEY=your_key
 set -a; source .env; set +a
 unset COHORT_MOCK
+python app.py
+```
+
+## Terminal live agent
+
+```bash
+export COHORT_MOCK=1
+python examples/live_cli.py
+```
+
+Type `/paste`, paste a brief, empty line, then chat with the agent.
+
+## One-shot demos
+
+```bash
+export COHORT_MOCK=1
 python examples/run_extraction.py
 python examples/run_agent.py
 ```
 
-Get a free Gemini key at [Google AI Studio](https://aistudio.google.com/app/apikey).
+## What the agent does
+
+| Piece | Role |
+|-------|------|
+| Extraction agent | Messy input → structured tasks (owners, dates, dependencies) |
+| Board agent | Check-ins, mark complete/blocked |
+| Contribution log | Who did what — fair record for the team and professor |
 
 ## Project structure
 
 ```
 cohort/
-├── agent/                 # The complete agent
-│   ├── schemas.py         # Task, BoardProposal, ContributionEvent
-│   ├── extractor.py       # Paste → structured board (Gemini or mock)
-│   ├── agent.py           # Board agent: check-in, complete, blocked, log
-│   └── README.md
+├── app.py                 # Live browser agent (Gradio)
+├── agent/
+│   ├── extractor.py       # Paste → board
+│   ├── agent.py           # Board actions + log
+│   └── schemas.py
 ├── examples/
-│   ├── run_extraction.py  # Demo: extraction agent
-│   └── run_agent.py       # Demo: full loop
-├── docs/
-│   ├── presentation.html
-│   └── SUBMISSION.md
-├── requirements.txt
-└── README.md
+│   ├── live_cli.py        # Terminal REPL
+│   ├── run_extraction.py
+│   └── run_agent.py
+└── requirements.txt
 ```
 
-## How the agent works
+## Design
 
-### 1. Extraction agent
-Input: assignment brief + team chat.  
-Output: validated JSON board (tasks, owners, dates, dependencies, open questions).
-
-Uses Gemini with forced JSON mode. Falls back to a deterministic mock board when `COHORT_MOCK=1`.
-
-### 2. Board agent
-Operates on the board:
-- Drafts check-in messages for late/blocked/open items only
-- Marks tasks complete or blocked
-- Writes every action into a contribution log
-
-### 3. Contribution log
-Attributable events: who completed what, who marked something blocked.  
-This is the fair record the professor can actually use.
-
-## Design principles
-
-1. **Agent, not chatbot** — structured work items, not essays
-2. **Selective** — only intervenes when something is late or blocked
-3. **Human in the loop** — proposes; people confirm
-4. **Trustworthy log** — every meaningful action is attributable
-5. **Runnable offline** — mock mode for demos and judges with no API key
-
-## Tech
-
-| Piece | Choice |
-|-------|--------|
-| Language | Python 3.11+ |
-| Schemas | Pydantic |
-| Model | Gemini (`google-genai`) |
-| Offline | `COHORT_MOCK=1` |
-| Secrets | Local `.env` only (gitignored) |
+- Agent, not chatbot essay writer
+- Selective (only late / blocked)
+- Structured output (Pydantic)
+- Offline mock mode for demos
+- Secrets stay in local `.env`
 
 ## License
 
 MIT
-
----
-
-Built for people who have been the herder one too many times.
