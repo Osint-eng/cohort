@@ -13,7 +13,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from agent import BoardStore, extract_board, run_agent
-from agent.schemas import ContributionEvent, TaskStatus
 
 store: BoardStore | None = None
 
@@ -42,7 +41,7 @@ def board_markdown() -> str:
         )
     b = store.board
     lines = [
-        f"### Board",
+        "### Board",
         f"**{b.project_summary}**\n",
         "| ID | Task | Owner | Status | Due |",
         "|----|------|-------|--------|-----|",
@@ -148,19 +147,9 @@ def reset():
 CSS = """
 .gradio-container {
   max-width: 1200px !important;
-  font-family: "Inter", system-ui, -apple-system, sans-serif !important;
+  font-family: system-ui, -apple-system, sans-serif !important;
 }
 footer { display: none !important; }
-#title h1 {
-  font-size: 1.75rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  margin-bottom: 0.25rem;
-}
-#title p {
-  color: #6b7280;
-  margin-top: 0;
-}
 #board-panel {
   border: 1px solid #e5e7eb;
   border-radius: 12px;
@@ -168,45 +157,27 @@ footer { display: none !important; }
   background: #fafafa;
   min-height: 420px;
 }
-.dark #board-panel {
-  background: #111827;
-  border-color: #1f2937;
-}
 """
 
 
 def main():
     import gradio as gr
 
-    with gr.Blocks(
-        title="Cohort — Live Agent",
-        css=CSS,
-        theme=gr.themes.Soft(
-            primary_hue="orange",
-            neutral_hue="slate",
-            font=gr.themes.GoogleFont("Inter"),
-        ),
-    ) as demo:
-        with gr.Row(elem_id="title"):
-            gr.Markdown(
-                """
+    with gr.Blocks(title="Cohort — Live Agent") as demo:
+        gr.Markdown(
+            """
 # Cohort
 **Live AI agent for student group projects** — paste a brief, get a board, track who did what.
-                """
-            )
+            """
+        )
 
         with gr.Row():
             with gr.Column(scale=3):
-                chatbot = gr.Chatbot(
-                    height=440,
-                    label="Agent",
-                    show_copy_button=True,
-                )
+                chatbot = gr.Chatbot(height=440, label="Agent")
                 msg = gr.Textbox(
                     placeholder="Paste a project brief / chat log, or type a command…",
                     label="Message",
                     lines=3,
-                    autofocus=True,
                 )
                 with gr.Row():
                     send = gr.Button("Send", variant="primary", scale=2)
@@ -219,18 +190,17 @@ def main():
                     elem_id="board-panel",
                 )
                 gr.Markdown(
-                    """
-**Quick commands**
-`check-in` · `list tasks` · `mark t1 complete` · `mark t2 blocked because API down` · `help`
-                    """
+                    "**Quick commands**  \n"
+                    "`check-in` · `list tasks` · `mark t1 complete` · "
+                    "`mark t2 blocked because API down` · `help`"
                 )
 
         gr.Markdown(
-            """
----
-Cohort does **not** write the assignment. It runs the project: owners, deadlines, and a fair contribution log.  
-Offline: `COHORT_MOCK=1` · Live Gemini: set `GEMINI_API_KEY` in `.env` · [GitHub](https://github.com/Osint-eng/cohort)
-            """
+            "---\n"
+            "Cohort does **not** write the assignment. It runs the project: owners, "
+            "deadlines, and a fair contribution log.  \n"
+            "Offline: `COHORT_MOCK=1` · Live Gemini: `GEMINI_API_KEY` in `.env` · "
+            "[GitHub](https://github.com/Osint-eng/cohort)"
         )
 
         send.click(
@@ -250,7 +220,12 @@ Offline: `COHORT_MOCK=1` · Live Gemini: set `GEMINI_API_KEY` in `.env` · [GitH
         )
         clear.click(reset, outputs=[msg, chatbot, board_view])
 
-    demo.launch(server_name="0.0.0.0", server_port=7860)
+    demo.launch(
+        server_name="0.0.0.0",
+        server_port=7860,
+        css=CSS,
+        theme=gr.themes.Soft(primary_hue="orange", neutral_hue="slate"),
+    )
 
 
 if __name__ == "__main__":
