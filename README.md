@@ -1,14 +1,14 @@
 # Cohort
 
-**Live AI agent that runs student group projects.**
+**Group chat agent for student teams.**
 
-Paste a brief or team chat. Cohort builds a task board, nags only what is late, and keeps a contribution log your professor can trust.
+Create a room, invite teammates, chat together. Mention `@cohort` to extract a task board, run check-ins, mark work complete, and keep a shared contribution log.
 
-It does not write the homework. It runs the project.
+It does not write the homework. It runs the project for the whole group.
 
 ---
 
-## Live agent (browser UI)
+## Quick start
 
 ```bash
 git clone https://github.com/Osint-eng/cohort.git
@@ -17,62 +17,81 @@ python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 
-export COHORT_MOCK=1          # offline demo, no API key
+export COHORT_MOCK=1
 python app.py
 ```
 
 Open **http://127.0.0.1:7860**
 
-| Action | How |
-|--------|-----|
-| Create board | Paste a brief / chat, or click **Load sample brief** |
-| Check-in | Type `check-in` |
-| Complete work | `mark t1 complete` |
-| Log blocker | `mark t2 blocked because API down` |
-| Reset | **Reset** button |
+1. Enter your **name** (and optional project title)
+2. Click **Create / Join room** — share the room code with teammates
+3. Chat normally
+4. Mention the agent:
+
+```
+@cohort sample
+@cohort check-in
+@cohort mark t1 complete
+@cohort mark t2 blocked because API down
+@cohort help
+```
+
+Everyone in the room shares the same board and contribution log.
 
 ### Live Gemini
 
 ```bash
-# .env (never commit)
-# GEMINI_API_KEY=your_key
+# .env (gitignored): GEMINI_API_KEY=...
 set -a; source .env; set +a
 unset COHORT_MOCK
 python app.py
 ```
 
-## What the agent does
+## How it works
 
 ```
-Brief / chat
-    → Extraction agent  (structured tasks, owners, dates)
-    → Board agent       (check-ins, complete, blocked)
-    → Contribution log  (who did what)
+Group chat (shared room)
+        ↓
+  @cohort extract / sample
+        ↓
+  Shared task board
+        ↓
+  @cohort check-in / mark complete / blocked
+        ↓
+  Contribution log (fair record)
 ```
+
+## Agent commands
+
+| Command | Effect |
+|---------|--------|
+| `@cohort help` | List commands |
+| `@cohort sample` | Load demo board |
+| `@cohort extract` + brief | Build board from paste |
+| `@cohort check-in` | What needs attention |
+| `@cohort list` | Show tasks |
+| `@cohort mark t1 complete` | Log completion |
+| `@cohort mark t2 blocked because …` | Log blocker |
 
 ## Project structure
 
 ```
 cohort/
-├── app.py                 # Professional live UI
+├── app.py              # Group chat + agent UI
 ├── agent/
-│   ├── extractor.py       # Paste → board
-│   ├── agent.py           # Board actions + log
+│   ├── extractor.py    # Brief → structured board
+│   ├── agent.py        # Check-in, complete, blocked, log
 │   └── schemas.py
 ├── examples/
-│   ├── live_cli.py
-│   ├── run_extraction.py
-│   └── run_agent.py
 └── requirements.txt
 ```
 
-## Design principles
+## Design
 
-1. Agent, not essay chatbot
-2. Selective (only late / blocked)
-3. Structured output (Pydantic)
-4. Fair contribution log
-5. Works offline (`COHORT_MOCK=1`)
+- Group-first: one room, one shared board
+- Agent is a teammate you @mention — not a separate app
+- Structured tasks + contribution log
+- Works offline with `COHORT_MOCK=1`
 
 ## License
 
