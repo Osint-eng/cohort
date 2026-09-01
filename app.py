@@ -41,7 +41,7 @@ def looks_like_brief(text: str) -> bool:
 
 
 def respond(message: str, history: list):
-    """Gradio 6 messages format: history is list[{role, content}]."""
+    """history: list of {role, content} dicts (Gradio 6 default)."""
     global store
     message = (message or "").strip()
     history = list(history or [])
@@ -49,7 +49,6 @@ def respond(message: str, history: list):
     if not message:
         return "", history
 
-    # Build or rebuild board from a pasted brief
     if store is None or looks_like_brief(message):
         try:
             board = extract_board(
@@ -103,7 +102,7 @@ AI agent for student group projects.
 Offline: `export COHORT_MOCK=1` · Live: `GEMINI_API_KEY` in `.env`
             """
         )
-        chatbot = gr.Chatbot(height=480, label="Cohort agent", type="messages")
+        chatbot = gr.Chatbot(height=480, label="Cohort agent")
         msg = gr.Textbox(
             placeholder="Paste a brief / chat log, or type: check-in · list tasks · mark t1 complete",
             label="Message",
