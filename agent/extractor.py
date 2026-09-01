@@ -1,6 +1,7 @@
 """Cohort Task Extraction Agent (Hugging Face).
 
 Set token locally: export HF_TOKEN=hf_...
+Offline demo: export COHORT_MOCK=1
 Never commit the token.
 """
 
@@ -12,23 +13,23 @@ import re
 from typing import Any
 
 from dotenv import load_dotenv
-from huggingface_hub import InferenceClient
 
 from .schemas import BoardProposal
 
 load_dotenv()
 
 HF_TOKEN = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_API_KEY")
+MOCK = os.environ.get("COHORT_MOCK", "").strip() in ("1", "true", "yes")
 
-# Prefer env override; otherwise try models commonly available on HF Inference
-DEFAULT_MODEL = os.environ.get("COHORT_HF_MODEL", "mistralai/Mistral-7B-Instruct-v0.3")
+DEFAULT_MODEL = os.environ.get(
+    "COHORT_HF_MODEL", "mistralai/Mistral-7B-Instruct-v0.3"
+)
 FALLBACK_MODELS = [
     "mistralai/Mistral-7B-Instruct-v0.3",
     "mistralai/Mistral-7B-Instruct-v0.2",
     "HuggingFaceH4/zephyr-7b-beta",
     "microsoft/Phi-3-mini-4k-instruct",
     "google/gemma-2-2b-it",
-    "meta-llama/Llama-3.2-3B-Instruct",
 ]
 
 SYSTEM_PROMPT = """You are the extraction engine for Cohort, an AI workspace for student teams.
@@ -50,11 +51,90 @@ status: todo|in_progress|blocked|done  priority: low|medium|high
 """
 
 
-def _get_client() -> InferenceClient:
+def _mock_board(
+    team_members: list[str] | None = None,
+    project_deadline: str | None = None,
+) -> BoardProposal:
+    """Deterministic sample board for offline / demo use."""
+    members = team_members or ["Sam", "Priya", "Alex"]
+    deadline = project_deadline or "2025-10-15"
+    data = {
+        "project_summary": (
+            "Student team building a study-group matcher web app "
+            "(design doc, React UI, API + matching, demo, writeup)."
+        ),
+        "tasks": [
+            {
+                "id": "t1",
+                "title": "Draft 4-page design document",
+                "description": "Architecture, matching approach, and screen list.",
+                "suggested_owner": members[0] if members else "Sam",
+                "due_date": "2025-10-05",
+                "depends_on": [],
+                "status": "todo",
+                "priority": "high",
+            },
+            {
+                "id": "t2",
+                "title": "Build React UI screens",
+                "description": "Main flows for forming and joining study groups.",
+                "suggested_owner": members[1] if len(members) > 1 else "Priya",
+                "due_date": "2025-10-11",
+                "depends_on": ["t1"],
+                "status": "todo",
+                "priority": "high",
+            },
+            {
+                "id": "t3",
+                "title": "Scaffold backend API + matching",
+                "description": "Auth, simple matching by skills and availability.",
+                "suggested_owner": members[2] if len(members) > 2 else "Alex",
+                "due_date": "2025-10-11",
+                "depends_on": ["t1"],
+                "status": "todo",
+                "priority": "high",
+            },
+            {
+                "id": "t4",
+                "title": "Record demo video",
+                "description": "Short walkthrough of the working app.",
+                "suggested_owner": None,
+                "due_date": "2025-10-12",
+                "depends_on": ["t2", "t3"],
+                "status": "todo",
+                "priority": "medium",
+            },
+            {
+                "id": "t5",
+                "title": "Write final reflection",
+                "description": "Team writeup for submission.",
+                "suggested_owner": members[0] if members else "Sam",
+                "due_date": deadline,
+                "depends_on": ["t4"],
+                "status": "todo",
+                "priority": "medium",
+            },
+        ],
+        "open_questions": [
+            "Where will the app be hosted?",
+            "Is external auth (Google) required or is email enough?",
+        ],
+        "suggested_next_actions": [
+            "Confirm owners on the board",
+            "Sam starts design doc so API and UI can unblock",
+            "Agree on demo time for Oct 12",
+        ],
+    }
+    return BoardProposal.model_validate(data)
+
+
+def _get_client():
+    from huggingface_hub import InferenceClient
+
     if not HF_TOKEN:
         raise RuntimeError(
             "Missing HF token. export HF_TOKEN=hf_... "
-            "Create at https://huggingface.co/settings/tokens"
+            "Or use offline mode: export COHORT_MOCK=1"
         )
     return InferenceClient(token=HF_TOKEN)
 
@@ -70,7 +150,7 @@ def _extract_json(text: str) -> dict[str, Any]:
     return json.loads(text[start : end + 1])
 
 
-def _chat_once(client: InferenceClient, model: str, user_content: str) -> str:
+def _chat_once(client: Any, model: str, user_content: str) -> str:
     completion = client.chat.completions.create(
         model=model,
         messages=[
@@ -89,8 +169,12 @@ def extract_board(
     team_members: list[str] | None = None,
     project_deadline: str | None = None,
     model: str | None = None,
-    client: InferenceClient | None = None,
+    client: Any = None,
 ) -> BoardProposal:
+    if MOCK:
+        print("[COHORT_MOCK=1] Using offline sample board (no API call).")
+        return _mock_board(team_members, project_deadline)
+
     client = client or _get_client()
 
     ctx = []
@@ -105,7 +189,6 @@ def extract_board(
         + "\n</source>\n\nExtract a task board. Reply with JSON only."
     )
 
-    # Build try list: explicit model first, then defaults
     candidates: list[str] = []
     if model:
         candidates.append(model)
@@ -126,8 +209,10 @@ def extract_board(
 
     raise RuntimeError(
         "All models failed. Last error: " + str(last_err) + "\n"
-        "Try: export COHORT_HF_MODEL=mistralai/Mistral-7B-Instruct-v0.2\n"
-        "Or enable Inference providers at https://huggingface.co/settings/inference-providers"
+        "Fix options:\n"
+        "  1) Offline demo:  export COHORT_MOCK=1\n"
+        "  2) Enable providers: https://huggingface.co/settings/inference-providers\n"
+        "  3) Try another model: export COHORT_HF_MODEL=..."
     )
 
 
