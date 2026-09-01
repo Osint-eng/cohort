@@ -1,63 +1,42 @@
-# Cohort AI Agent
+# Cohort AI Agent (Hugging Face)
 
-Claude-powered agent for the Cohort student-team workspace.
+Structured task extraction and board agent via **Hugging Face Inference API**.
 
-This follows patterns from the [Anthropic Claude Cookbooks](https://github.com/anthropics/claude-cookbooks) (`tool_use/` and structured extraction examples).
+## Setup
 
-## What it does
-
-1. **Structured extraction** (`extractor.py`)  
-   Turns a brief, chat export, or notes into a validated task board (titles, owners, due dates, dependencies) via Claude tool use.
-
-2. **Board agent** (`agent.py`)  
-   Multi-turn tool-using agent that:
-   - Lists tasks
-   - Marks blocked / complete (with contribution log)
-   - Drafts *selective* check-in messages (only late or blocked items)
-   - Proposes reassignments
-
-## Install
+1. Create a token: https://huggingface.co/settings/tokens  
+2. Set it **locally only** (never commit):
 
 ```bash
-pip install anthropic pydantic python-dotenv
-export ANTHROPIC_API_KEY=sk-ant-...
+export HF_TOKEN=hf_your_new_token_here
 ```
 
-Optional: `COHORT_MODEL=claude-sonnet-4-5` (default).
+Or `.env` in repo root (gitignored):
 
-## Quick start
+```
+HF_TOKEN=hf_your_new_token_here
+```
+
+3. Install:
 
 ```bash
-# From repo root
+pip install huggingface_hub pydantic python-dotenv
+```
+
+4. Run:
+
+```bash
 python examples/run_extraction.py
 python examples/run_agent.py
 ```
 
-## Design principles (aligned with Cohort product)
+Optional:
 
-| Principle | How the agent implements it |
-|-----------|-----------------------------|
-| Human in the loop | Extraction proposes; humans confirm on the board |
-| Structured only | Tool schemas force JSON work items, never free-form essays |
-| Selective nags | `draft_checkin` only surfaces late / blocked work |
-| Trustworthy log | Every status change becomes a `ContributionEvent` |
-| Model is a tool | The product is the board + log; Claude is the extraction/ops layer |
-
-## File map
-
-```
-agent/
-  schemas.py      # Pydantic models (Task, BoardProposal, ContributionEvent)
-  extractor.py    # paste → board (tool-use structured extraction)
-  agent.py        # multi-turn board agent + tools
-  __init__.py
-examples/
-  run_extraction.py
-  run_agent.py
+```bash
+export COHORT_HF_MODEL=Qwen/Qwen2.5-7B-Instruct
 ```
 
-## Extending
+## Security
 
-- Swap the in-memory `BoardStore` for your BaaS / database.
-- Add tools: `invite_member`, `set_due_date`, `link_dependency`.
-- Call `extract_board()` from your TanStack / API route when a user drops a brief.
+If a token was pasted in chat or a public place, **revoke it** and create a new one.
+Never commit tokens to GitHub.
