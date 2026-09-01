@@ -12,7 +12,6 @@ Then open http://127.0.0.1:7860
 from __future__ import annotations
 
 import os
-import re
 from typing import Any
 
 from dotenv import load_dotenv
@@ -20,7 +19,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from agent import BoardStore, extract_board, run_agent
-from agent.schemas import TaskStatus
 
 # ---------------------------------------------------------------------------
 # Session state (single-user demo)
@@ -45,18 +43,50 @@ def _board_summary() -> str:
 
 
 def _is_brief(text: str) -> bool:
-    """Heuristic: long text or looks like a project dump."""
     if len(text) > 280:
         return True
     keys = ("due", "deliverable", "assignment", "team", "project", "deadline", "chat:")
     return sum(1 for k in keys if k in text.lower()) >= 2
 
 
-def chat(message: str, history: list) -> tuple[str, list]:
+def _history_to_pairs(history: list) -> list:
+    """Normalize Gradio history (messages or tuples) to list of [user, assistant]."""
+    if not history:
+        return []
+    # New format: list of {role, content}
+    if isinstance(history[0], dict):
+        pairs = []
+        user_msg = None
+        for m in history:
+            role = m.get("role")
+            content = m.get("content", "")
+            if role == "user":
+                user_msg = content
+            elif role == "assistant" and user_msg is not None:
+                pairs.append([user_msg, content])
+                user_msg = None
+        return pairs
+    # Old format: list of [user, assistant]
+    return history
+
+
+def _pairs_to_messages(pairs: list) -> list[dict[str, str]]:
+    messages = []
+    for pair in pairs:
+        if not pair or len(pair) < 2:
+            continue
+        messages.append({"role": "user", "content": pair[0] or ""})
+        messages.append({"role": "assistant", "content": pair[1] or ""})
+    return messages
+
+
+def respond(message: str, history: list) -> tuple[str, list]:
     global store
     message = (message or "").strip()
+    pairs = _history_to_pairs(history)
+
     if not message:
-        return "", history
+        return "", _pairs_to_messages(pairs)
 
     # New board from pasted brief
     if store is None or _is_brief(message):
@@ -76,20 +106,19 @@ def chat(message: str, history: list) -> tuple[str, list]:
                 f"Could not extract a board: {e}\n\n"
                 "Tip: `export COHORT_MOCK=1` for offline mode, or check GEMINI_API_KEY."
             )
-        history = history + [[message, reply]]
-        return "", history
+        pairs = pairs + [[message, reply]]
+        return "", _pairs_to_messages(pairs)
 
     # Operate on existing board
     try:
         reply = run_agent(message, store)
-        # Always append current board snapshot for clarity
         if store.board:
             reply = reply + "\n\n---\n" + _board_summary()
     except Exception as e:
         reply = f"Agent error: {e}"
 
-    history = history + [[message, reply]]
-    return "", history
+    pairs = pairs + [[message, reply]]
+    return "", _pairs_to_messages(pairs)
 
 
 def reset() -> tuple[str, list]:
@@ -115,7 +144,11 @@ AI agent for student group projects.
 Offline: `export COHORT_MOCK=1`  ·  Live: set `GEMINI_API_KEY` in `.env`
             """
         )
-        chatbot = gr.Chatbot(height=480, label="Cohort agent")
+        chatbot = gr.Chatbot(
+            height=480,
+            label="Cohort agent",
+            type="messages",
+        )
         msg = gr.Textbox(
             placeholder="Paste a brief / chat log, or type: check-in · list tasks · mark t1 complete",
             label="Message",
@@ -125,8 +158,8 @@ Offline: `export COHORT_MOCK=1`  ·  Live: set `GEMINI_API_KEY` in `.env`
             send = gr.Button("Send", variant="primary")
             clear = gr.Button("Reset board")
 
-        send.click(chat, inputs=[msg, chatbot], outputs=[msg, chatbot])
-        msg.submit(chat, inputs=[msg, chatbot], outputs=[msg, chatbot])
+        send.click(respond, inputs=[msg, chatbot], outputs=[msg, chatbot])
+        msg.submit(respond, inputs=[msg, chatbot], outputs=[msg, chatbot])
         clear.click(reset, outputs=[msg, chatbot])
 
     return demo
