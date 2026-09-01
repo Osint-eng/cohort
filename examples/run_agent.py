@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
-"""
-Example: Run the Cohort board agent after extraction.
-
-Requires ANTHROPIC_API_KEY.
-"""
+"""Run the Cohort board agent. Requires HF_TOKEN."""
 
 from __future__ import annotations
 
@@ -22,37 +18,26 @@ Alex owns API + matching. Demo Oct 12, final due Oct 15.
 
 
 def main() -> None:
-    print("1. Extracting initial board...")
+    print("1. Extracting board (Hugging Face)...")
     board = extract_board(
         SAMPLE,
         team_members=["Sam", "Priya", "Alex"],
         project_deadline="2025-10-15",
     )
     store = BoardStore(board)
-    print(f"   → {len(board.tasks)} tasks extracted\n")
+    print(f"   → {len(board.tasks)} tasks\n")
 
-    print("2. Asking agent for a selective check-in...")
-    reply = run_agent(
-        "Draft a short check-in message for anything that is late or blocked. "
-        "If nothing is late yet, say so and list what's due soon.",
-        store,
-    )
-    print(reply)
+    print("2. Check-in...")
+    print(run_agent("Draft a check-in for late or blocked items.", store))
     print()
 
-    print("3. Marking a task complete via agent...")
     if board.tasks:
-        first_id = board.tasks[0].id
-        reply2 = run_agent(
-            f"Sam just finished the design doc. Mark task {first_id} as complete "
-            f"and log the contribution.",
-            store,
-        )
-        print(reply2)
-        print()
-        print("Contribution log:")
+        tid = board.tasks[0].id
+        print("3. Mark complete...")
+        print(run_agent(f"Sam finished task {tid}. Mark it complete.", store))
+        print("\nContribution log:")
         for e in store.contribution_log:
-            print(f"  • {e.actor} {e.action} {e.task_id} — {e.note or ''}")
+            print(f"  • {e.actor} {e.action} {e.task_id}")
 
 
 if __name__ == "__main__":
