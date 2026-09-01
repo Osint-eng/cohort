@@ -19,7 +19,17 @@ from .schemas import BoardProposal
 load_dotenv()
 
 HF_TOKEN = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_API_KEY")
-DEFAULT_MODEL = os.environ.get("COHORT_HF_MODEL", "Qwen/Qwen2.5-7B-Instruct")
+
+# Prefer env override; otherwise try models commonly available on HF Inference
+DEFAULT_MODEL = os.environ.get("COHORT_HF_MODEL", "mistralai/Mistral-7B-Instruct-v0.3")
+FALLBACK_MODELS = [
+    "mistralai/Mistral-7B-Instruct-v0.3",
+    "mistralai/Mistral-7B-Instruct-v0.2",
+    "HuggingFaceH4/zephyr-7b-beta",
+    "microsoft/Phi-3-mini-4k-instruct",
+    "google/gemma-2-2b-it",
+    "meta-llama/Llama-3.2-3B-Instruct",
+]
 
 SYSTEM_PROMPT = """You are the extraction engine for Cohort, an AI workspace for student teams.
 Turn messy project input into a clean task board.
@@ -60,6 +70,19 @@ def _extract_json(text: str) -> dict[str, Any]:
     return json.loads(text[start : end + 1])
 
 
+def _chat_once(client: InferenceClient, model: str, user_content: str) -> str:
+    completion = client.chat.completions.create(
+        model=model,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_content},
+        ],
+        max_tokens=2048,
+        temperature=0.2,
+    )
+    return completion.choices[0].message.content or ""
+
+
 def extract_board(
     source_text: str,
     *,
@@ -69,7 +92,7 @@ def extract_board(
     client: InferenceClient | None = None,
 ) -> BoardProposal:
     client = client or _get_client()
-    model = model or DEFAULT_MODEL
+
     ctx = []
     if team_members:
         ctx.append("Known team members: " + ", ".join(team_members))
@@ -81,23 +104,31 @@ def extract_board(
         + source_text.strip()
         + "\n</source>\n\nExtract a task board. Reply with JSON only."
     )
-    try:
-        completion = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_content},
-            ],
-            max_tokens=2048,
-            temperature=0.2,
-        )
-        raw = completion.choices[0].message.content or ""
-    except Exception:
-        prompt = SYSTEM_PROMPT + "\n\nUser:\n" + user_content + "\n\nAssistant:\n"
-        raw = client.text_generation(
-            prompt, model=model, max_new_tokens=2048, temperature=0.2
-        )
-    return BoardProposal.model_validate(_extract_json(raw))
+
+    # Build try list: explicit model first, then defaults
+    candidates: list[str] = []
+    if model:
+        candidates.append(model)
+    elif os.environ.get("COHORT_HF_MODEL"):
+        candidates.append(DEFAULT_MODEL)
+    for m in FALLBACK_MODELS:
+        if m not in candidates:
+            candidates.append(m)
+
+    last_err: Exception | None = None
+    for m in candidates:
+        try:
+            raw = _chat_once(client, m, user_content)
+            return BoardProposal.model_validate(_extract_json(raw))
+        except Exception as e:
+            last_err = e
+            continue
+
+    raise RuntimeError(
+        "All models failed. Last error: " + str(last_err) + "\n"
+        "Try: export COHORT_HF_MODEL=mistralai/Mistral-7B-Instruct-v0.2\n"
+        "Or enable Inference providers at https://huggingface.co/settings/inference-providers"
+    )
 
 
 def extract_board_as_dict(source_text: str, **kwargs: Any) -> dict[str, Any]:
