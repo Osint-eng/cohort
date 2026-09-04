@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
 """Cohort — Group chat agent for student teams.
 
-Local:
-  export COHORT_MOCK=1
-  python app.py
-  → http://127.0.0.1:7860
-
-Deploy: Hugging Face Spaces (see README)
+Local:  COHORT_MOCK=1 python app.py
+Vercel: exports top-level `app` (ASGI)
 """
 
 from __future__ import annotations
@@ -23,11 +19,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Default to mock on Spaces / free deploys (no paid API required)
 if os.environ.get("COHORT_MOCK") is None:
     os.environ["COHORT_MOCK"] = "1"
 
 from agent import BoardStore, extract_board, run_agent
+
+import gradio as gr
 
 
 @dataclass
@@ -122,12 +119,11 @@ def agent_reply(room: Room, user: str, text: str) -> str:
             "**Commands**\n"
             "- `@cohort sample` — load demo board\n"
             "- `@cohort extract` + paste brief\n"
-            "- `@cohort check-in` — what needs attention\n"
-            "- `@cohort list` — show tasks\n"
-            "- `@cohort mark t1 complete` — log completion\n"
-            "- `@cohort mark t2 blocked because …` — log blocker\n"
-            "- `@cohort help`\n\n"
-            "Everyone in the room shares the same board and contribution log."
+            "- `@cohort check-in`\n"
+            "- `@cohort list`\n"
+            "- `@cohort mark t1 complete`\n"
+            "- `@cohort mark t2 blocked because …`\n"
+            "- `@cohort help`"
         )
 
     if low.startswith("sample"):
@@ -142,30 +138,21 @@ def agent_reply(room: Room, user: str, text: str) -> str:
     if low.startswith("extract"):
         payload = body[7:].strip()
         if not payload:
-            return (
-                "Send the brief in the same message:\n"
-                "`@cohort extract`\n"
-                "<paste brief / chat log here>"
-            )
+            return "Send: `@cohort extract` then paste the brief in the same message."
         board = extract_board(
             payload,
             team_members=list(room.members) or ["Sam", "Priya", "Alex"],
         )
         room.store = BoardStore(board)
-        return f"Board created — **{len(board.tasks)} tasks**. Everyone in `{room.code}` shares it."
+        return f"Board created — **{len(board.tasks)} tasks**."
 
     if room.store is None:
-        return "No board yet. Use `@cohort sample` or `@cohort extract` with a brief."
+        return "No board yet. Use `@cohort sample` or `@cohort extract`."
 
     return run_agent(body, room.store)
 
 
-def post_message(
-    room_code: str,
-    display_name: str,
-    message: str,
-    history: list,
-):
+def post_message(room_code: str, display_name: str, message: str, history: list):
     name = (display_name or "Anon").strip()[:32] or "Anon"
     message = (message or "").strip()
     history = list(history or [])
@@ -210,8 +197,7 @@ def join_room(room_code: str, display_name: str, title: str):
     hello = (
         f"Joined room **`{room.code}`** as **{name}**.\n\n"
         f"Share code **{room.code}** with teammates.\n"
-        "Chat normally. Mention **@cohort** when you need the agent\n"
-        "(e.g. `@cohort sample`, `@cohort check-in`, `@cohort mark t1 complete`)."
+        "Mention **@cohort** (e.g. `@cohort sample`, `@cohort check-in`)."
     )
     history = [{"role": "assistant", "content": f"**Cohort:** {hello}"}]
     return code, history, board_markdown(room)
@@ -220,8 +206,7 @@ def join_room(room_code: str, display_name: str, title: str):
 def refresh_board(room_code: str):
     if not room_code or not room_code.strip():
         return "### Join a room first."
-    room = get_or_create_room(room_code)
-    return board_markdown(room)
+    return board_markdown(get_or_create_room(room_code))
 
 
 CSS = """
@@ -237,15 +222,16 @@ footer { display: none !important; }
 """
 
 
-def main():
-    import gradio as gr
-
-    with gr.Blocks(title="Cohort — Group Agent") as demo:
+def build_demo() -> gr.Blocks:
+    with gr.Blocks(
+        title="Cohort — Group Agent",
+        css=CSS,
+        theme=gr.themes.Soft(primary_hue="orange", neutral_hue="slate"),
+    ) as demo:
         gr.Markdown(
-            """
-# Cohort
-**Group chat agent for student teams** — share a room, chat, and let the agent run the project board.
-            """
+            "# Cohort\n"
+            "**Group chat agent for student teams** — share a room, chat, "
+            "and let the agent run the project board."
         )
 
         with gr.Row():
@@ -254,11 +240,7 @@ def main():
                 placeholder="Leave empty to create · or paste a code to join",
                 scale=2,
             )
-            name_in = gr.Textbox(
-                label="Your name",
-                placeholder="e.g. Sam",
-                scale=1,
-            )
+            name_in = gr.Textbox(label="Your name", placeholder="e.g. Sam", scale=1)
             title_in = gr.Textbox(
                 label="Project title (optional)",
                 placeholder="CS 450 matcher",
@@ -284,21 +266,14 @@ def main():
                     elem_id="board-panel",
                 )
                 gr.Markdown(
-                    """
-**Agent commands**
-
-`@cohort help`  
-`@cohort sample`  
-`@cohort extract` + brief  
-`@cohort check-in`  
-`@cohort list`  
-`@cohort mark t1 complete`  
-`@cohort mark t2 blocked because …`
-                    """
+                    "**Agent commands**\n\n"
+                    "`@cohort help` · `@cohort sample` · `@cohort extract` + brief  \n"
+                    "`@cohort check-in` · `@cohort list`  \n"
+                    "`@cohort mark t1 complete` · `@cohort mark t2 blocked because …`"
                 )
 
         gr.Markdown(
-            "Cohort does **not** write the assignment — it runs the project for the whole group.  \n"
+            "Cohort does **not** write the assignment — it runs the project.  \n"
             "[GitHub](https://github.com/Osint-eng/cohort)"
         )
 
@@ -328,13 +303,17 @@ def main():
         )
         refresh.click(refresh_board, inputs=[active_code], outputs=[board])
 
+    return demo
+
+
+# --- Build once: Vercel needs a top-level ASGI `app` ---
+demo = build_demo()
+app = demo.app  # FastAPI/Starlette ASGI app for Vercel Python runtime
+
+
+def main():
     port = int(os.environ.get("PORT", "7860"))
-    demo.launch(
-        server_name="0.0.0.0",
-        server_port=port,
-        css=CSS,
-        theme=gr.themes.Soft(primary_hue="orange", neutral_hue="slate"),
-    )
+    demo.launch(server_name="0.0.0.0", server_port=port)
 
 
 if __name__ == "__main__":
