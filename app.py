@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """Cohort — Group chat agent for student teams.
 
+Local:
   export COHORT_MOCK=1
   python app.py
   → http://127.0.0.1:7860
 
-Create or join a room, chat with teammates, mention @cohort to run the agent.
+Deploy: Hugging Face Spaces (see README)
 """
 
 from __future__ import annotations
 
+import os
 import re
 import secrets
 import time
@@ -21,11 +23,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from agent import BoardStore, extract_board, run_agent
+# Default to mock on Spaces / free deploys (no paid API required)
+if os.environ.get("COHORT_MOCK") is None:
+    os.environ["COHORT_MOCK"] = "1"
 
-# ---------------------------------------------------------------------------
-# In-memory rooms (demo scale)
-# ---------------------------------------------------------------------------
+from agent import BoardStore, extract_board, run_agent
 
 
 @dataclass
@@ -43,7 +45,7 @@ LOCK = Lock()
 
 
 def _new_code() -> str:
-    return secrets.token_hex(3).upper()  # e.g. A1B2C3
+    return secrets.token_hex(3).upper()
 
 
 def get_or_create_room(code: str | None, title: str = "Group project") -> Room:
@@ -111,10 +113,7 @@ Priya: Demo video on the 12th."""
 
 
 def agent_reply(room: Room, user: str, text: str) -> str:
-    """Handle @cohort … commands."""
-    body = text
-    # strip mention
-    body = re.sub(r"@cohort\b", "", body, flags=re.I).strip()
+    body = re.sub(r"@cohort\b", "", text, flags=re.I).strip()
     low = body.lower()
 
     if low in ("help", "commands", "?", ""):
@@ -122,7 +121,7 @@ def agent_reply(room: Room, user: str, text: str) -> str:
             f"Hey {user}. I run the project board for this room.\n\n"
             "**Commands**\n"
             "- `@cohort sample` — load demo board\n"
-            "- `@cohort extract` + paste brief (next message or same line)\n"
+            "- `@cohort extract` + paste brief\n"
             "- `@cohort check-in` — what needs attention\n"
             "- `@cohort list` — show tasks\n"
             "- `@cohort mark t1 complete` — log completion\n"
@@ -141,7 +140,7 @@ def agent_reply(room: Room, user: str, text: str) -> str:
         return f"Loaded sample board with **{len(board.tasks)} tasks**. See the panel →"
 
     if low.startswith("extract"):
-        payload = body[7:].strip()  # after 'extract'
+        payload = body[7:].strip()
         if not payload:
             return (
                 "Send the brief in the same message:\n"
@@ -158,7 +157,6 @@ def agent_reply(room: Room, user: str, text: str) -> str:
     if room.store is None:
         return "No board yet. Use `@cohort sample` or `@cohort extract` with a brief."
 
-    # Delegate to board agent (mark complete, check-in, list, blocked)
     return run_agent(body, room.store)
 
 
@@ -181,14 +179,11 @@ def post_message(
     if not message:
         return "", history, board_markdown(room)
 
-    # User message into history
     history.append({"role": "user", "content": f"**{name}:** {message}"})
     room.messages.append({"role": "user", "name": name, "text": message, "ts": time.time()})
 
-    # Agent trigger
     if re.search(r"@cohort\b", message, flags=re.I) or message.lower().startswith("/"):
         try:
-            # allow /check-in style
             text = message
             if text.startswith("/"):
                 text = "@cohort " + text[1:]
@@ -276,7 +271,7 @@ def main():
                 chat = gr.Chatbot(label="Group chat", height=460)
                 msg = gr.Textbox(
                     label="Message",
-                    placeholder="Chat with the group · @cohort help · @cohort sample · @cohort check-in",
+                    placeholder="Chat · @cohort help · @cohort sample · @cohort check-in",
                     lines=2,
                 )
                 with gr.Row():
@@ -290,7 +285,7 @@ def main():
                 )
                 gr.Markdown(
                     """
-**Agent commands** (type in chat)
+**Agent commands**
 
 `@cohort help`  
 `@cohort sample`  
@@ -304,10 +299,9 @@ def main():
 
         gr.Markdown(
             "Cohort does **not** write the assignment — it runs the project for the whole group.  \n"
-            "Offline: `COHORT_MOCK=1` · [GitHub](https://github.com/Osint-eng/cohort)"
+            "[GitHub](https://github.com/Osint-eng/cohort)"
         )
 
-        # state of active room code for this browser session
         active_code = gr.State("")
 
         def do_join(code, name, title):
@@ -334,9 +328,10 @@ def main():
         )
         refresh.click(refresh_board, inputs=[active_code], outputs=[board])
 
+    port = int(os.environ.get("PORT", "7860"))
     demo.launch(
         server_name="0.0.0.0",
-        server_port=7860,
+        server_port=port,
         css=CSS,
         theme=gr.themes.Soft(primary_hue="orange", neutral_hue="slate"),
     )
